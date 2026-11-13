@@ -26,6 +26,7 @@ from module.logger import logger
 from module.statistics.drop_cleanup import cleanup_drop_screenshots_if_due
 from module.statistics.utils import pack
 from module.base.device_id import get_device_id
+from module.statistics.privacy import CLOUD_UPLOAD_ENABLED
 
 
 # 大世界掉落解析的适用范围（2026-09-25 定）：凡属大世界任务都解析入库，
@@ -786,6 +787,14 @@ class AzurStats:
             local = is_opsi_drop_genre(genre)
         # “不上传”仅关闭云端提交，科研领奖仍需解析到本地统计。
         analyze = genre == 'research'
-        upload = (getattr(self.config, 'DropRecord_CloudUpload', False) is True
+        # 云端上传总开关锁定在 module.statistics.privacy 里。为 False 时在这里短路，
+        # 从源头去掉只为上传服务的开销：add() 里的逐帧 classify_frame、
+        # 整帧 np.array_equal 去重、以及 capture() 的 1280x720 PNG 编码与 SHA-256。
+        # The master switch lives in module.statistics.privacy. Short-circuiting here
+        # removes upload-only work at the source: per-frame classify_frame and the
+        # full-frame array_equal dedupe in add(), plus the 1280x720 PNG encode and
+        # SHA-256 in capture().
+        upload = (CLOUD_UPLOAD_ENABLED
+                  and getattr(self.config, 'DropRecord_CloudUpload', False) is True
                   and method_value in ('upload', 'save_and_upload') and genre in ('commission', 'research'))
         return DropImage(stat=self, genre=genre, save=save, local=local, info=info, analyze=analyze, upload=upload)

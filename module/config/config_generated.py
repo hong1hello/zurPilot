@@ -253,9 +253,9 @@ class GeneratedConfig:
     DropRecord_RetentionDays = 0
     DropRecord_BackUpMethod = 'zip'  # delete, zip, copy
     DropRecord_ZipMethod = 'zip'  # bz2, gzip, xz, zip
-    DropRecord_CloudUpload = True
-    DropRecord_ResearchRecord = 'upload'  # upload, save_and_upload, do_not
-    DropRecord_CommissionRecord = 'upload'  # upload, save_and_upload, do_not
+    DropRecord_CloudUpload = False
+    DropRecord_ResearchRecord = 'save'  # upload, save_and_upload, do_not
+    DropRecord_CommissionRecord = 'save'  # upload, save_and_upload, do_not
     DropRecord_CommissionIncomeScreenshot = 'save'  # do_not, save
     DropRecord_CombatRecord = 'do_not'  # save, do_not
     DropRecord_OpsiHazard1Leveling = 'do_not'  # save, do_not
@@ -268,7 +268,7 @@ class GeneratedConfig:
     DropRecord_OpsiOther = 'do_not'  # save, do_not
     DropRecord_MeowfficerBuy = 'do_not'  # save, do_not
     DropRecord_MeowfficerTalent = 'do_not'  # save, do_not
-    DropRecord_TelemetryReport = True
+    DropRecord_TelemetryReport = False
 
     # 配置组 `Backup`
     Backup_Enable = True

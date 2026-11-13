@@ -9,6 +9,7 @@ from module.base.device_id import get_device_id
 from module.cloud.service import CloudService
 from module.cloud.protocol import CloudError
 from module.logger import logger
+from module.statistics.privacy import CLOUD_UPLOAD_ENABLED
 from module.persistence.database import get_database
 from module.statistics.cl1_database import Cl1Database
 
@@ -18,6 +19,29 @@ SCENE_RECORD_ARGS = {'research': 'ResearchRecord', 'commission': 'CommissionReco
 
 
 def permitted(config, scene):
+    """判断该场景是否允许云端上传。
+
+    本 fork 锁定关闭：`CLOUD_UPLOAD_ENABLED` 为 False 时直接返回 False，
+    配置文件写 `DropRecord_CloudUpload=True` 也不会生效。返回 False 会让
+    `resolver_for()` 给出 None，`item.py` 走 `resolver is None` 的本地路径，
+    于是每件物品的云端识别与整帧截图编码都不会发生。
+
+    Args:
+        config: 实例运行配置。
+        scene: 掉落场景（research / commission）。
+
+    Returns:
+        bool: 恒定 False —— 数据只保留在本地。
+
+    Returns whether the scene may upload to the cloud.
+
+    This fork pins it off: with `CLOUD_UPLOAD_ENABLED` False it always returns False,
+    so a config file asking for uploads has no effect. Returning False makes
+    `resolver_for()` yield None, which sends `item.py` down the local-only branch and
+    skips both the per-item cloud match and the full-frame screenshot encode.
+    """
+    if not CLOUD_UPLOAD_ENABLED:
+        return False
     argument = SCENE_RECORD_ARGS.get(scene)
     return (argument is not None
             and getattr(config, 'DropRecord_CloudUpload', False) is True

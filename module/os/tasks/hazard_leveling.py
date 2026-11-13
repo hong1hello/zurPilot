@@ -23,6 +23,7 @@ from module.os.ship_exp import ship_info_get_level_exp
 from module.os.ship_exp_data import LIST_SHIP_EXP
 from module.os.tasks.scheduling import CoinTaskMixin
 from module.statistics.opsi_runtime import cl1_round_timer, record_cl1_akashi_encounter
+from module.statistics.privacy import TELEMETRY_REPORT_ENABLED
 from module.os.sea_miles_ocr import OCR_SEA_MILES_DIGIT
 from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
 from module.os_handler.assets import STRATEGIC_SEARCH_MAP_OPTION_OFF
@@ -126,8 +127,11 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
     def _cl1_handle_telemetry(self):
         """在后台异步线程中提交侵蚀 1 遥测数据指标。"""
         try:
-            if not getattr(self.config, "DropRecord_TelemetryReport", True):
-                logger.info("[大世界-侵蚀1练级] [错误] 遥测上报已关闭")
+            # 本地锁定：TELEMETRY_REPORT_ENABLED 为 False 时无论配置如何都不上报。
+            # Locally pinned: with TELEMETRY_REPORT_ENABLED False nothing is reported.
+            if not TELEMETRY_REPORT_ENABLED or not getattr(
+                    self.config, "DropRecord_TelemetryReport", False):
+                logger.info("[大世界-侵蚀1练级] 遥测上报已关闭（本地锁定）")
             else:
 
                 def run_telemetry():
