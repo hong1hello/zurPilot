@@ -13,9 +13,9 @@ Deploy:
     # Branch of AzurPilot
     # [开发者] 使用 'dev'、'app' 等分支体验新功能
     # [Developer] Use 'dev', 'app', etc, to try new features
-    # [本 fork] 固定 'privacy/local-only'（已合并进 master，二者同一提交）
-    # [This fork] Pinned to 'privacy/local-only' (merged into master, same commit)
-    Branch: privacy/local-only
+    # [本 fork] 使用 'master'，隐私改动已全部并入
+    # [This fork] Use 'master'; all privacy changes are merged in
+    Branch: master
     # Git 可执行文件路径
     # Filepath of git executable.
     GitExecutable: ./.venv/bin/git

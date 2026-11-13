@@ -18,9 +18,12 @@ GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
 # 本 fork：关闭云端上传与遥测的本地化版本。
 # This fork: local-only build with cloud upload and telemetry pinned off.
 FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
-# 默认跟踪的隐私分支（已合并进 master，两者指向同一提交）。
-# Default privacy branch (merged into master; both point at the same commit).
+# 隐私分支名，仅作记录；默认更新分支是 master。
+# The privacy branch name, kept for reference; the default branch is master.
 PRIVACY_BRANCH = 'privacy/local-only'
+# 默认跟踪的分支。
+# Default tracked branch.
+DEFAULT_BRANCH = 'master'
 GIT_OVER_CDN_FALLBACK_REPOSITORIES = [
     'https://cnb.cool/AzurPilot/AzurPilot',
     'https://gitcode.com/ddl2/AzurPilot',
@@ -45,7 +48,7 @@ class ConfigModel:
     """Windows 部署配置模型，定义所有配置项及其默认值。"""
     # Git 配置
     Repository: str = FORK_REPOSITORY
-    Branch: str = PRIVACY_BRANCH
+    Branch: str = DEFAULT_BRANCH
     GitExecutable: str = "./.venv/Scripts/git/cmd/git.exe"
     GitProxy: Optional[str] = None
     SSLVerify: bool = False
