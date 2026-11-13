@@ -6,16 +6,16 @@ Deploy:
     #           亦可直接指定 'https://cnb.cool/AzurPilot/AzurPilot' ('cnb') 或 'https://gitcode.com/ddl2/AzurPilot' ('gitcode')
     # [CN user] Use 'cn' or 'git://git.pull/AzurPilot' for domestic mirror acceleration (auto-balanced across CNB & GitCode),
     #           or explicitly set 'https://cnb.cool/AzurPilot/AzurPilot' ('cnb') / 'https://gitcode.com/ddl2/AzurPilot' ('gitcode')
-    # [其他用户] 使用 'https://github.com/wess09/AzurPilot'
-    # [Other] Use 'https://github.com/wess09/AzurPilot'
-    Repository: 'https://github.com/wess09/AzurPilot'
+    # [其他用户] 使用 'https://github.com/hong1hello/zurPilot'
+    # [Other] Use 'https://github.com/hong1hello/zurPilot'
+    Repository: https://github.com/hong1hello/zurPilot
     # AzurPilot 分支
     # Branch of AzurPilot
     # [开发者] 使用 'dev'、'app' 等分支体验新功能
     # [Developer] Use 'dev', 'app', etc, to try new features
-    # [其他用户] 使用 'master'，稳定分支
-    # [Other] Use 'master', the stable branch
-    Branch: 'master'
+    # [本 fork] 固定 'privacy/local-only'（已合并进 master，二者同一提交）
+    # [This fork] Pinned to 'privacy/local-only' (merged into master, same commit)
+    Branch: privacy/local-only
     # Git 可执行文件路径
     # Filepath of git executable.
     GitExecutable: './.venv/Scripts/git/cmd/git.exe'

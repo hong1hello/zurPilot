@@ -19,7 +19,16 @@ GIT_OVER_CDN_FALLBACK_REPOSITORY = GIT_OVER_CDN_FALLBACK_REPOSITORIES[1]
 def choose_fallback_repository() -> str:
     """在可用的国内镜像源（CNB 与 GitCode）之间分流，避免单一镜像源流量过大引发风控。"""
     return random.choice(GIT_OVER_CDN_FALLBACK_REPOSITORIES)
+# 上游官方仓库。只作为「是否为官方源」的判据使用（国内镜像重定向），
+# 不再作为默认更新源；现有测试仍以它作为官方源基准。
+# Upstream official repository. Kept only as the mirror-redirect criterion.
 GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
+# 本 fork：关闭云端上传与遥测的本地化版本。
+# This fork: local-only build with cloud upload and telemetry pinned off.
+FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
+# 默认跟踪的隐私分支（已合并进 master，两者指向同一提交）。
+# Default privacy branch (merged into master; both point at the same commit).
+PRIVACY_BRANCH = 'privacy/local-only'
 
 
 class ErrorCodes:
@@ -47,8 +56,8 @@ class ExecutionError(Exception):
 class ConfigModel:
     """部署配置模型，定义所有配置项及其默认值。"""
     # Git 配置
-    Repository: str = GITHUB_REPOSITORY
-    Branch: str = "master"
+    Repository: str = FORK_REPOSITORY
+    Branch: str = PRIVACY_BRANCH
     GitExecutable: str = "./.venv/Scripts/git/cmd/git.exe" if sys.platform == "win32" else "./.venv/bin/git"
     GitProxy: Optional[str] = None
     SSLVerify: bool = False
@@ -181,7 +190,7 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
             self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY] and self.Branch == 'master'
         )
         if self.Repository in ['global']:
-            super().__setattr__('Repository', 'https://github.com/wess09/AzurPilot')
+            super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
             super().__setattr__('Repository', choose_fallback_repository())
         if self.Repository in ['cnb']:

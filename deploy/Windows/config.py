@@ -11,7 +11,16 @@ from deploy.Windows.utils import DEPLOY_CONFIG, DEPLOY_TEMPLATE, cached_property
 
 
 GIT_OVER_CDN_REPOSITORY = 'git://git.pull/AzurPilot'
+# 上游官方仓库。只作为「是否为官方源」的判据使用（国内镜像重定向），
+# 不再作为默认更新源；现有测试仍以它作为官方源基准。
+# Upstream official repository. Kept only as the mirror-redirect criterion.
 GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
+# 本 fork：关闭云端上传与遥测的本地化版本。
+# This fork: local-only build with cloud upload and telemetry pinned off.
+FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
+# 默认跟踪的隐私分支（已合并进 master，两者指向同一提交）。
+# Default privacy branch (merged into master; both point at the same commit).
+PRIVACY_BRANCH = 'privacy/local-only'
 GIT_OVER_CDN_FALLBACK_REPOSITORIES = [
     'https://cnb.cool/AzurPilot/AzurPilot',
     'https://gitcode.com/ddl2/AzurPilot',
@@ -35,8 +44,8 @@ class ExecutionError(Exception):
 class ConfigModel:
     """Windows 部署配置模型，定义所有配置项及其默认值。"""
     # Git 配置
-    Repository: str = GITHUB_REPOSITORY
-    Branch: str = "master"
+    Repository: str = FORK_REPOSITORY
+    Branch: str = PRIVACY_BRANCH
     GitExecutable: str = "./.venv/Scripts/git/cmd/git.exe"
     GitProxy: Optional[str] = None
     SSLVerify: bool = False
@@ -144,7 +153,7 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         # 绕过 webui.config.DeployConfig.__setattr__()，不写入 deploy.yaml
         super().__setattr__('GitOverCdn', self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY])
         if self.Repository in ['global']:
-            super().__setattr__('Repository', 'https://github.com/wess09/AzurPilot')
+            super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
             super().__setattr__('Repository', choose_fallback_repository())
         if self.Repository in ['cnb']:

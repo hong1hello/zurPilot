@@ -2,12 +2,12 @@ Deploy:
   Git:
     # URL of AzurPilot repository
     # [CN user] Use 'cn' to get update from git-over-cdn service or auto-balanced domestic mirrors (CNB / GitCode)
-    # [Other] Use 'global' to get update from https://github.com/wess09/AzurPilot
-    Repository: 'global'
+    # [Other] Use 'global' (now maps to this fork) or the explicit fork URL
+    Repository: https://github.com/hong1hello/zurPilot
     # Branch of AzurPilot
     # [Developer] Use 'dev', 'app', etc, to try new features
     # [Other] Use 'master', the stable branch
-    Branch: 'master'
+    Branch: privacy/local-only
     # Filepath of git executable `git.exe`
     # [Other] Use you own git
     GitExecutable: './.venv/Scripts/git/cmd/git.exe'
