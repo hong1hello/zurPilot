@@ -125,6 +125,7 @@ DEPLOY_GROUPS: tuple[tuple[str, tuple[DeployField, ...]], ...] = (
         "Stock",
         (
             DeployField("StockUploadEnabled", "bool", default=True),
+            DeployField("StockReconcileEnabled", "bool", default=True),
         ),
     ),
 )

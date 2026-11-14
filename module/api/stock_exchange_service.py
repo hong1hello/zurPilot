@@ -230,12 +230,12 @@ class StockExchangeService:
         identity, key = self._identity(instance)
         return make_instance_request(identity, key, action, username, points)
 
-    def _remote(self, path, method='POST', body=None):
+    def _remote(self, path, method='POST', body=None, timeout=12):
         headers = {'Content-Type': 'application/json'}
         payload = None if body is None else json.dumps(body, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode()
         try:
             response = http.request(method, exchange_url() + '/api' + path, data=payload,
-                                    headers=headers, timeout=12)
+                                    headers=headers, timeout=timeout)
         except (http.RequestException, TimeoutError, OSError):
             raise ApiError('STOCK_UNAVAILABLE', '交易所暂不可连接，稍后自动重试') from None
         with response:
@@ -262,9 +262,14 @@ class StockExchangeService:
         now = time.monotonic()
         is_deleted = identity in self.retired or bool((binding or {}).get('deleted'))
         record = self.records.get(instance) if is_deleted else self._read_snapshot(instance)
-        if not is_deleted and (refresh or now >= self.last_status.get(instance, 0)):
+        if not is_deleted and not binding and not refresh and instance not in self.remote_status:
+            # 首次打开且这个实例还没绑定股票：不为首屏等网络，页面先给出注册表单。
+            self.start()
+            self.last_status[instance] = now + 15
+        elif not is_deleted and (refresh or now >= self.last_status.get(instance, 0)):
             try:
-                reply = self._remote('/v2/instance/status', 'POST', self._signed(instance, 'status'))
+                # 打开页面等不起 12 秒；状态查询用短超时，失败再降级成本地信息。
+                reply = self._remote('/v2/instance/status', 'POST', self._signed(instance, 'status'), timeout=3)
                 if reply['status'] == 404 and (reply.get('data') or {}).get('error', {}).get('code') == 'STOCK_NOT_REGISTERED':
                     self.remote_status[instance] = None
                 else:
@@ -276,7 +281,13 @@ class StockExchangeService:
                     self._mark_deleted(instance)
                 self.statuses[instance] = str(error)
                 if not binding and identity not in self.retired:
-                    raise
+                    # 还没绑定任何股票时，网络不可达不应把界面卡成"正在加载"：
+                    # 直接按未注册返回，后台同步继续尝试，页面 15 秒后自动再查。
+                    if error.code in ('STOCK_UNAVAILABLE', 'STOCK_INVALID_RESPONSE'):
+                        self.start()
+                        self.last_status[instance] = now + 15
+                    else:
+                        raise
         self.start()
         remote = self.remote_status.get(instance) or {}
         stock = remote.get('stock')

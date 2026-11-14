@@ -7719,7 +7719,6 @@
     "MenuDevelop": {
       "HomePage": "Home",
       "Translate": "Translate",
-      "Announcement": "Announcement",
       "Update": "Updater",
       "Remote": "Remote Control",
       "Setting": "Settings",
@@ -7911,6 +7910,8 @@
       "GroupStock": "Stock exchange",
       "StockUploadEnabled": "Action point upload",
       "StockUploadEnabledHelp": "When off, action points are no longer reported. Existing history is kept and backfilled after re-enabling.",
+      "StockReconcileEnabled": "Monthly reconcile",
+      "StockReconcileEnabledHelp": "When off, monthly digests are no longer uploaded for reconciliation. Detail points still upload and differences are backfilled after re-enabling.",
       "GroupWebui": "WebUI",
       "Repository": "AzurPilot Repository",
       "RepositoryHelp": "Git repository used for install and update. The hong1hello build only updates from https://github.com/hong1hello/zurPilot; official URLs and CN mirrors are normalised on read.",

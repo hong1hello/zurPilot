@@ -7719,7 +7719,6 @@
     "MenuDevelop": {
       "HomePage": "主頁",
       "Translate": "翻譯",
-      "Announcement": "公告",
       "Update": "更新器",
       "Remote": "遠端控制",
       "Setting": "設定",
@@ -7911,6 +7910,8 @@
       "GroupStock": "茗交所",
       "StockUploadEnabled": "行動力上傳",
       "StockUploadEnabledHelp": "關閉後不再向茗交所上報行動力，已上報的歷史保留；重新開啟後會自動補足。",
+      "StockReconcileEnabled": "月度對帳",
+      "StockReconcileEnabledHelp": "關閉後不再上傳每月摘要做對帳；行動力明細仍按上一個開關上傳，重新開啟後會自動補齊差異。",
       "GroupWebui": "WebUI 設定",
       "Repository": "AzurPilot 倉庫地址",
       "RepositoryHelp": "用於更新和安裝的 Git 倉庫地址。hong1hello 修改版只從 https://github.com/hong1hello/zurPilot 更新，官方位址與國內鏡像會在讀取時自動歸一。",

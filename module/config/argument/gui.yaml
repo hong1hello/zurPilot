@@ -64,6 +64,7 @@ FleetManagement:
 MenuDevelop:
   HomePage:
   Translate:
+  # 公告功能已移除；此键仅为旧 GUI 菜单配置占位，界面不再展示。
   Announcement:
   Update:
   Remote:

@@ -38,7 +38,7 @@ class StockExchangeTests(unittest.TestCase):
         self.calls = []
         self.service._remote = Mock(side_effect=self.remote)
 
-    def remote(self, path, method='GET', body=None, *args):
+    def remote(self, path, method='GET', body=None, *args, **kwargs):
         self.calls.append((path, body))
         action = path.rsplit('/', 1)[1]
         identity, key = self.service._identity('test')

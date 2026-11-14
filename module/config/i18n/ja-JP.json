@@ -7719,7 +7719,6 @@
     "MenuDevelop": {
       "HomePage": "ホームページ",
       "Translate": "翻訳する",
-      "Announcement": "発表",
       "Update": "アップデーター",
       "Remote": "リモートコントロール",
       "Setting": "設定",
@@ -7911,6 +7910,8 @@
       "GroupStock": "茗交所",
       "StockUploadEnabled": "行動力アップロード",
       "StockUploadEnabledHelp": "オフにすると行動力を送信しません。送信済みの履歴は残り、再度オンにすると自動で補完されます。",
+      "StockReconcileEnabled": "月次照合",
+      "StockReconcileEnabledHelp": "オフにすると月次ダイジェストの照合送信を停止します。明細は引き続き送信され、再度オンにすると差異が補完されます。",
       "GroupWebui": "WebUI 設定",
       "Repository": "AzurPilot リポジトリ",
       "RepositoryHelp": "インストールと更新に使う Git リポジトリです。hong1hello ビルドは https://github.com/hong1hello/zurPilot からのみ更新し、公式 URL と中国本土ミラーは読み込み時に正規化されます。",

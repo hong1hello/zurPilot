@@ -17,6 +17,15 @@ from module.statistics.cl1_legacy import read_ap_snapshots
 SHANGHAI = timezone(timedelta(hours=8))
 
 
+def reconcile_enabled():
+    """月度对账开关；读不到配置时按开启处理。"""
+    try:
+        from module.runtime.setting import State
+        return bool(getattr(State.deploy_config, 'StockReconcileEnabled', True))
+    except Exception:
+        return True
+
+
 def history_point(total, recorded):
     if type(total) not in (int, float) or not 0 <= total <= 1_000_000 or int(total) != total or not recorded:
         return None
@@ -253,7 +262,7 @@ class ActionHistory:
                     if actual.get('count') != len(points) or actual.get('digest') != digest:
                         connection.execute('UPDATE samples SET uploaded=0 WHERE month=?', (month,))
                         mismatch = True
-                if not mismatch and 'reconcile' in binding.get('capabilities', []):
+                if not mismatch and 'reconcile' in binding.get('capabilities', []) and reconcile_enabled():
                     accepted(remote('/v2/instance/reconcile', 'POST', make_instance_request(identity, key, 'reconcile', months=checked_months)))
                 self.pending[instance] = mismatch
                 self.next_check[instance] = time.monotonic() + 300

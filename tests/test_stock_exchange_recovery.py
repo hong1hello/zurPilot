@@ -31,7 +31,7 @@ class StockRecoveryTests(unittest.TestCase):
         self.store = ProgramStore(self.root / 'config')
         self.now = datetime.now()
         self.identities = {}
-        def remote(path, method='POST', body=None, *args):
+        def remote(path, method='POST', body=None, *args, **kwargs):
             name = next((name for name in self.configs.names() if self.service.protection.resolve(name) == body['instanceId']), None)
             binding = self.service.bindings.get(name)
             if not binding:

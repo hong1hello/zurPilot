@@ -78,6 +78,8 @@ class ConfigModel:
     SSLVerify: bool = False
     # 茗交所行动力上传开关；关闭后只保留本地历史，不再上报。
     StockUploadEnabled: bool = True
+    # 月度摘要对账开关；关掉后只影响对账，行动力明细照常上传。
+    StockReconcileEnabled: bool = True
 
     # Python 配置
     PythonExecutable: str = "./.venv/Scripts/python.exe" if sys.platform == "win32" else "./.venv/bin/python"
