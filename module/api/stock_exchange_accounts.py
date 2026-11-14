@@ -164,22 +164,29 @@ class StockAccountService:
     # ------------------------------------------------------------------ 导入
     def import_account(self, payload, note=''):
         """校验并保存一份导出文件；只校验格式与密钥，不联网、不改当前身份。"""
-        if not isinstance(payload, str) or not payload.strip():
+        if not isinstance(payload, str):
+            raise ApiError('INVALID_PARAMS', '请提供账号文件内容')
+        # 记事本、PowerShell 的 utf8 重定向都会加 BOM，json 解析器不认，先在入口剥掉。
+        payload = payload.lstrip('\ufeff').strip()
+        if not payload:
             raise ApiError('INVALID_PARAMS', '请提供账号文件内容')
         if len(payload) > 64 * 1024:
             raise ApiError('INVALID_PARAMS', '账号文件过大')
         try:
             row = json.loads(payload)
         except ValueError:
-            raise ApiError('STOCK_ACCOUNT_INVALID', '账号文件不是合法 JSON') from None
+            raise ApiError(
+                'STOCK_ACCOUNT_INVALID',
+                '账号文件不是合法 JSON。如果刚从记事本保存过，请另存为 UTF-8（不带 BOM）后重试',
+            ) from None
         if not isinstance(row, dict) or row.get('format') != ACCOUNT_FORMAT:
             raise ApiError('STOCK_ACCOUNT_INVALID', '不是 zurPilot 账号文件')
         if row.get('version') != ACCOUNT_VERSION:
             raise ApiError('STOCK_ACCOUNT_INVALID', '账号文件版本不受支持')
-        instance_id = row.get('instanceId')
+        # UUID 归一：大小写、花括号、空白都不该让一份没改过的文件被拒。
+        raw_instance = row.get('instanceId')
         try:
-            if str(uuid.UUID(instance_id)) != instance_id:
-                raise ValueError()
+            instance_id = str(uuid.UUID(str(raw_instance).strip()))
         except (ValueError, TypeError, AttributeError):
             raise ApiError('STOCK_ACCOUNT_INVALID', '账号文件 instanceId 无效') from None
         key = _load_private_key(row.get('privateKey'))
@@ -189,8 +196,12 @@ class StockAccountService:
         expected_public = _public_b64(key)
         if row.get('publicKey') and row['publicKey'] != expected_public:
             raise ApiError('STOCK_ACCOUNT_INVALID', '账号文件公钥与私钥不匹配')
-        expected_binding = binding_key(instance_id, key)
-        if row.get('bindingKey') and row['bindingKey'] != expected_binding:
+        # 绑定码是私钥与 instanceId 的派生值；归一前后两种写法都认，其余一律拒绝。
+        expected_binding = {binding_key(instance_id, key)}
+        raw_text = str(raw_instance).strip()
+        if raw_text != instance_id:
+            expected_binding.add(binding_key(raw_text, key))
+        if row.get('bindingKey') and row['bindingKey'] not in expected_binding:
             raise ApiError('STOCK_ACCOUNT_INVALID', '账号文件绑定码与私钥不匹配')
         stock_id = row.get('stockId') or 0
         if type(stock_id) is not int or stock_id < 0:

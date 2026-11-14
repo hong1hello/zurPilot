@@ -101,11 +101,19 @@ function StockAccounts({instance,connection,onSwitched}:{instance:string;connect
       setNotice(`已导出 ${result.filename}。文件内含私钥，请妥善保管。`)
     }catch(error){setError((error as Error).message)}finally{setBusy(false)}
   }
+  async function readAccountFile(selected:File){
+    const bytes=new Uint8Array(await selected.arrayBuffer())
+    // 记事本"Unicode"另存为是 UTF-16，直接按 UTF-8 读会整片乱码，先明确拦下来。
+    if(bytes.length>1&&((bytes[0]===0xFF&&bytes[1]===0xFE)||(bytes[0]===0xFE&&bytes[1]===0xFF))){
+      throw new Error('这个文件是 UTF-16 编码，请用文本编辑器另存为 UTF-8 后再上传。')
+    }
+    return new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/,'')
+  }
   async function upload(selected?:File){
     if(!selected)return
     setBusy(true);setError('');setNotice('')
     try{
-      const result=await api.request('stock.account.import',{payload:await selected.text(),note}) as StockAccountImport
+      const result=await api.request('stock.account.import',{payload:await readAccountFile(selected),note}) as StockAccountImport
       const label=result.username||result.instanceId.slice(0,8)
       setNotice(result.updated?`已更新账号 ${label}`:`已导入账号 ${label}`)
       setNote('');await load()

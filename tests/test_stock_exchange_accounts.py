@@ -110,6 +110,35 @@ class StockAccountTests(unittest.TestCase):
         # 重复导入按更新处理：新备注覆盖旧的，accountId 保持不变。
         self.assertEqual(listing['accounts'][0]['note'], '第二次')
 
+    def test_import_tolerates_utf8_bom(self):
+        """记事本 / PowerShell 保存的 UTF-8 会带 BOM，不该因此被拒。"""
+        payload = make_payload(username='BOM 测试')
+        text = '\ufeff' + json.dumps(payload, ensure_ascii=False, indent=2)
+        result = self.service.import_account(text)
+        self.assertEqual(result['username'], 'BOM 测试')
+
+    def test_import_tolerates_uppercase_instance_id(self):
+        """UUID 大小写等价；归档时统一成小写。"""
+        key, private, public = make_key()
+        upper = INSTANCE.upper()
+        payload = {
+            'format': 'azurpilot-stock-account', 'version': 1, 'exportedAt': '2026-11-14T00:00:00+00:00',
+            'instanceId': upper, 'privateKey': private, 'publicKey': public,
+            'bindingKey': binding_key(upper, key),
+            'username': '大写测试', 'stockId': 1, 'stockUrl': EXCHANGE,
+        }
+        result = self.import_payload(payload)
+        self.assertEqual(result['instanceId'], INSTANCE)
+        self.assertEqual(self.service.list('test')['accounts'][0]['instanceId'], INSTANCE)
+
+    def test_import_accepts_files_without_derived_fields(self):
+        """只带私钥也能导入：派生字段缺失不是错误。"""
+        payload = make_payload()
+        for field in ('publicKey', 'bindingKey', 'stockUrl'):
+            payload.pop(field)
+        result = self.import_payload(payload)
+        self.assertEqual(result['instanceId'], INSTANCE)
+
     # ------------------------------------------------------------------ 导出
     def test_export_contains_private_key_and_derived_fields(self):
         payload = make_payload(username='导出测试', stock_id=777)
