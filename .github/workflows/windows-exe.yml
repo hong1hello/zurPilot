@@ -74,7 +74,11 @@ jobs:
             /XD .git dev_tools tests logs .tmp config screenshots node_modules .build dist stage `
             /XF *.pyc *.log | Out-Null
           # robocopy 0-7 都是成功（1 表示复制了文件），>=8 才是错误
-          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with $LASTEXITCODE" }
+          $robocopyCode = $LASTEXITCODE
+          if ($robocopyCode -ge 8) { throw "robocopy failed with $robocopyCode" }
+          # robocopy 用 1 表示「成功复制了文件」，必须清零，
+          # 否则 pwsh 退出时会把这个 1 当成整个步骤的失败退出码。
+          $LASTEXITCODE = 0
 
           $readme = @(
             'AzurPilot Windows 便携安装包',
@@ -100,6 +104,7 @@ jobs:
             Set-Content -LiteralPath 'dist-pkg/SHA256SUMS.txt' -Encoding ascii
           "ZIP_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host ("package size: {0:N2} MB" -f ((Get-Item $zip).Length / 1MB))
+          exit 0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
