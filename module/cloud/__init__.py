@@ -1,1 +1,1 @@
-"""Public cloud protocols; template images never pass through the statistics server."""
+"""Local aggregation helpers only; the cloud upload path was removed."""

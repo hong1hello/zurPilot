@@ -23,7 +23,6 @@ from module.os.ship_exp import ship_info_get_level_exp
 from module.os.ship_exp_data import LIST_SHIP_EXP
 from module.os.tasks.scheduling import CoinTaskMixin
 from module.statistics.opsi_runtime import cl1_round_timer, record_cl1_akashi_encounter
-from module.statistics.privacy import TELEMETRY_REPORT_ENABLED
 from module.os.sea_miles_ocr import OCR_SEA_MILES_DIGIT
 from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
 from module.os_handler.assets import STRATEGIC_SEARCH_MAP_OPTION_OFF
@@ -123,40 +122,6 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         self._cl1_next_search_ready = bool(solved_events) and self.is_in_map() and self.match_template_color(
             STRATEGIC_SEARCH_MAP_OPTION_OFF, offset=(20, 20),
         )
-
-    def _cl1_handle_telemetry(self):
-        """在后台异步线程中提交侵蚀 1 遥测数据指标。"""
-        try:
-            # 本地锁定：TELEMETRY_REPORT_ENABLED 为 False 时无论配置如何都不上报。
-            # Locally pinned: with TELEMETRY_REPORT_ENABLED False nothing is reported.
-            if not TELEMETRY_REPORT_ENABLED or not getattr(
-                    self.config, "DropRecord_TelemetryReport", False):
-                logger.info("[大世界-侵蚀1练级] 遥测上报已关闭（本地锁定）")
-            else:
-
-                def run_telemetry():
-                    try:
-                        from module.statistics.cl1_data_submitter import (
-                            get_cl1_submitter,
-                        )
-
-                        instance_name = getattr(self.config, "config_name", None)
-                        submitter = get_cl1_submitter(instance_name=instance_name)
-                        raw_data = submitter.collect_data()
-                        if raw_data.get("battle_count", 0) > 0:
-                            metrics = submitter.calculate_metrics(raw_data)
-                            submitter.submit_data(metrics)
-                            logger.info(
-                                f"侵蚀 1 数据提交已排队，实例名称: {instance_name}"
-                            )
-                    except Exception as e:
-                        logger.debug(f"[大世界-侵蚀1练级] 侵蚀 1 数据提交后台执行失败: {e}")
-
-                from module.base.async_executor import async_executor
-
-                async_executor.submit(run_telemetry)
-        except Exception as e:
-            logger.debug(f"[大世界-侵蚀1练级] 侵蚀 1 数据提交触发失败: {e}")
 
     def os_hazard1_leveling(self):
         """侵蚀 1 练级任务入口。"""
@@ -282,9 +247,6 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
         # ===== 执行侵蚀 1 战略搜索与战后处理 =====
         self._cl1_run_battle()
-
-        # ===== 处理遥测数据提交 =====
-        self._cl1_handle_telemetry()
 
     def os_check_leveling(self):
         """检查大世界阵容练级进度。"""

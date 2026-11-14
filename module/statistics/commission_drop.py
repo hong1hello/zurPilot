@@ -105,7 +105,6 @@ class CommissionReader:
         from module.ocr.ocr import Ocr
         from module.statistics.get_items import GetItemsStatistics
         from module.statistics.item import ItemGrid
-        from module.statistics.cloud_upload import resolver_for
 
         server = 'cn' if config.SERVER.startswith('cn') else config.SERVER
         self.server = server
@@ -113,7 +112,6 @@ class CommissionReader:
         self.stats = GetItemsStatistics()
         self.stats.grid = ItemGrid(None, {})
         self.stats.grid.load_template_folder('./assets/stats_commission_items')
-        self.stats.grid.cloud_resolver = resolver_for(config, 'commission')
         self.stats.grid.amount_ocr = CommissionAmount([], threshold=96, name='Commission_cloud_amount')
         self.stats.amount_area = (50, 72, 94, 94)
 
@@ -180,10 +178,13 @@ def parse_commissions(images, reader):
     return events, diagnostics
 
 
-def record_commission_drops(images, config, *, collected_at=None):
-    from module.statistics.cloud_upload import enqueue_record, queue_for
+def record_commission_local(images, config, *, collected_at=None):
+    """Parse commission drops and keep them in the local database.
+
+    Cloud submission used to happen here too; it is removed in this fork, so the
+    function stops at the local write and only logs the parse diagnostics.
+    """
     from module.statistics.cl1_database import db
-    from module.cloud.files import write_json
 
     events, diagnostics = parse_commissions(images, CommissionReader(config))
     stamp = collected_at or datetime.now(timezone.utc).isoformat()
@@ -195,12 +196,6 @@ def record_commission_drops(images, config, *, collected_at=None):
             amounts[row['item']] = amounts.get(row['item'], 0) + row['amount']
         local = {**event, 'items': amounts, 'item_entries': event['items']}
         db.add_cloud_commission_drop(config.config_name, local)
-        try:
-            enqueue_record(config, 'commission', **event)
-        except Exception as error:
-            logger.warning(f'[云端统计] 委托上报入队失败，本地记录已保留: {error}')
     if diagnostics:
-        path = queue_for(config).root / 'diagnostics' / (uuid.uuid4().hex + '.json')
-        write_json(path, {'collected_at': stamp, 'errors': diagnostics})
-        logger.warning(f'[云端统计] 委托配对需核对: {diagnostics}')
+        logger.warning(f'[委托统计] 委托配对需核对: {diagnostics}')
     return events
