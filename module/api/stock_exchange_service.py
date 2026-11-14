@@ -357,6 +357,19 @@ class StockExchangeService:
             self._notify({'instance': instance})
         return result
 
+    def reload_identity(self, instance):
+        """导入或切换账号后清掉该实例缓存，避免继续用旧身份上传。"""
+        with self.lock:
+            for state in (self.bindings, self.identities, self.names, self.stamps, self.records,
+                          self.statuses, self.remote_status, self.last_status, self.history.scanned,
+                          self.history.next_send, self.history.next_check, self.history.failures,
+                          self.history.pending, self.history.legacy_warnings):
+                state.pop(instance, None)
+            self.monitors.discard(instance)
+            self.refresh_stamp = None
+        self._refresh()
+        self._notify({'instance': instance})
+
     @account_operation
     def sync_once(self, only=None, force=False):
         try:

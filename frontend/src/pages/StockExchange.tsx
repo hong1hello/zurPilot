@@ -3,7 +3,7 @@ import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react'
 import {useParams,Link} from 'react-router-dom'
 import {ArrowLeft,CheckCircle2,Copy,ExternalLink,ShieldCheck,TrendingUp} from 'lucide-react'
 import {api} from '../api/client'
-import type {StockExchangeStatus,StockExchangeRebuild} from '../api/types'
+import type {StockExchangeStatus,StockExchangeRebuild,StockAccountsData,StockAccountExport,StockAccountImport,StockAccountPlan} from '../api/types'
 import {useConnection} from '../app/context'
 import {ErrorBox,Loading,PageTitle} from '../components/ui'
 import './stock-exchange.css'
@@ -77,5 +77,81 @@ export function StockExchange(){
       </section>
       <aside className="panel stock-instance-card stock-instance-guide"><h2>注册与绑定</h2><ol><li><strong>注册实例股票</strong><p>在本页输入用户名，为当前实例发行一只股票。它与 QQ 交易账户分开管理。</p></li><li><strong>注册 QQ 交易账户</strong><p>加 QQ 群 <a href="https://qm.qq.com/q/93NWF3S362" target="_blank" rel="noreferrer">1126124220</a> 进行注册。在群里 @官方机器人并发送“注册 &lt;用户名&gt;”，直接获得随机初始密码；首次网页登录必须改密。单独 @机器人可查看指令菜单。</p></li><li><strong>绑定并开始交易</strong><p>在群里 @官方机器人并发送“绑定股票 &lt;绑定码&gt;”，命令无需加“/”。使用交易账号和密码登录 <a href={EXCHANGE} target="_blank" rel="noreferrer">stock.azurpilot.com</a>；机器人重置密码后，首次登录需设置新密码。</p></li></ol><p className="muted">茗交所是模拟证券游戏，模拟币及股票不对应真实资金，不提供充值或提现。</p></aside>
     </div>}
+    <StockAccounts instance={instance} connection={connection} onSwitched={()=>{opened.current='';void refresh()}}/>
+  </section>
+}
+
+/** 账号档案：导出/导入含私钥的账号文件，并在当前实例上切换交易所身份。 */
+function StockAccounts({instance,connection,onSwitched}:{instance:string;connection:string;onSwitched:()=>void}){
+  const [data,setData]=useState<StockAccountsData>(),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+  const [plan,setPlan]=useState<StockAccountPlan>(),[note,setNote]=useState(''),[notice,setNotice]=useState('')
+  const file=useRef<HTMLInputElement>(null)
+  const load=useCallback(async()=>{
+    if(connection!=='ready')return
+    try{setData(await api.request('stock.accounts',{instance}));setError('')}
+    catch(error){setError((error as Error).message)}
+  },[instance,connection])
+  useEffect(()=>{void load()},[load])
+  async function download(){
+    setBusy(true);setError('');setNotice('')
+    try{
+      const result=await api.request('stock.account.export',{instance}) as StockAccountExport
+      const url=URL.createObjectURL(new Blob([result.content],{type:'application/json'}))
+      const link=document.createElement('a');link.href=url;link.download=result.filename;link.click();URL.revokeObjectURL(url)
+      setNotice(`已导出 ${result.filename}。文件内含私钥，请妥善保管。`)
+    }catch(error){setError((error as Error).message)}finally{setBusy(false)}
+  }
+  async function upload(selected?:File){
+    if(!selected)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      const result=await api.request('stock.account.import',{payload:await selected.text(),note}) as StockAccountImport
+      const label=result.username||result.instanceId.slice(0,8)
+      setNotice(result.updated?`已更新账号 ${label}`:`已导入账号 ${label}`)
+      setNote('');await load()
+    }catch(error){setError((error as Error).message)}finally{setBusy(false);if(file.current)file.current.value=''}
+  }
+  async function activate(accountId:string,confirm=false){
+    setBusy(true);setError('');setNotice('')
+    try{
+      const result=await api.request('stock.account.activate',{instance,accountId,confirm}) as StockAccountPlan
+      if(result.switched){setPlan(undefined);setNotice(result.message);await load();onSwitched()}else setPlan(result)
+    }catch(error){setError((error as Error).message)}finally{setBusy(false)}
+  }
+  async function remove(accountId:string){
+    setBusy(true);setError('')
+    try{await api.request('stock.account.remove',{accountId});await load()}
+    catch(error){setError((error as Error).message)}finally{setBusy(false)}
+  }
+  return <section className="panel stock-instance-card stock-accounts">
+    <div className="panel-heading"><h2>账号档案</h2><span className="muted">导出 · 导入 · 切换</span></div>
+    {error&&<ErrorBox message={error}/>}
+    {notice&&<p role="status">{notice}</p>}
+    <p className="muted">导出文件包含本实例的 Ed25519 私钥，等同于账号本身：泄露即可被冒充，丢失则原身份无法再上传。切换会改写实例 identity，历史资源按新身份重新归属，操作前会自动备份到 config/backup/。</p>
+    <div className="stock-account-actions">
+      <button className="button" disabled={busy} onClick={()=>void download()}>导出当前账号</button>
+      <input ref={file} type="file" accept="application/json,.json" hidden onChange={event=>void upload(event.target.files?.[0])}/>
+      <button className="button" disabled={busy} onClick={()=>file.current?.click()}>上传账号文件</button>
+      <input aria-label="账号备注" maxLength={64} value={note} onChange={event=>setNote(event.target.value)} placeholder="给导入的账号加个备注（可选）"/>
+    </div>
+    {plan&&<div className="stock-account-plan" role="dialog" aria-label="确认切换账号">
+      <h3>切换到这个账号？</h3>
+      <p>账号：{plan.username||'未命名'}（{plan.targetInstanceId.slice(0,8)}）</p>
+      <p>当前身份 <code>{plan.currentInstanceId.slice(0,8)}</code> → 切换后 <code>{plan.targetInstanceId.slice(0,8)}</code></p>
+      <p className="muted">{plan.message}</p>
+      <button className="button primary" disabled={busy} onClick={()=>void activate(plan.accountId,true)}>确认切换</button>
+      <button className="button" disabled={busy} onClick={()=>setPlan(undefined)}>取消</button>
+    </div>}
+    {!data?<Loading/>:data.accounts.length===0
+      ?<p className="muted">还没有导入过账号。先点「导出当前账号」留一份，或上传别处导出的文件。</p>
+      :<table className="stock-account-table"><thead><tr><th>股票名称</th><th>编号</th><th>身份</th><th>备注</th><th/></tr></thead><tbody>
+        {data.accounts.map(row=><tr key={row.accountId} className={row.active?'active':''}>
+          <td>{row.username||'未命名'}{row.active&&<span className="stock-account-badge">当前</span>}</td>
+          <td>{row.stockId||'—'}</td>
+          <td><code>{row.instanceId.slice(0,8)}</code></td>
+          <td>{row.note||'—'}</td>
+          <td><button className="button" disabled={busy||row.active} onClick={()=>void activate(row.accountId)}>切换</button><button className="icon-button" disabled={busy} aria-label="删除档案" onClick={()=>void remove(row.accountId)}>×</button></td>
+        </tr>)}
+      </tbody></table>}
   </section>
 }

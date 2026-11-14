@@ -11,3 +11,17 @@
 .stock-instance-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;min-height:50vh;text-align:center}
 @media(max-width:780px){.stock-instance-grid{grid-template-columns:1fr}.stock-instance-hero{padding:24px;gap:16px}.stock-instance-mark{width:54px;height:54px;border-radius:16px}.stock-instance-hero h2{font-size:21px}.stock-instance-card{padding:22px}}
 @media(max-width:450px){.stock-instance-hero{align-items:flex-start}.stock-instance-mark{display:none}.stock-instance-page .page-title{flex-wrap:wrap;gap:12px}.stock-instance-facts>div{grid-template-columns:80px minmax(0,1fr)}}
+
+/* 账号档案面板：列表、导入导出与切换确认。 */
+.stock-accounts {grid-column: 1 / -1}
+.stock-account-actions {display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0}
+.stock-account-actions input[type='text'], .stock-account-actions input:not([type]) {flex: 1 1 220px; min-width: 180px}
+.stock-account-table {width: 100%; border-collapse: collapse; font-size: 14px}
+.stock-account-table th, .stock-account-table td {text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line, rgba(255,255,255,.08))}
+.stock-account-table th {font-weight: 600; opacity: .72; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em}
+.stock-account-table tr.active {background: rgba(76,141,255,.08)}
+.stock-account-table td .button {margin-right: 6px}
+.stock-account-badge {margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: rgba(76,141,255,.16); color: #a9c7ff; border: 1px solid rgba(76,141,255,.35)}
+.stock-account-plan {margin: 14px 0; padding: 14px 16px; border: 1px solid rgba(245,165,36,.35); background: rgba(245,165,36,.07); border-radius: 10px}
+.stock-account-plan h3 {margin: 0 0 8px}
+.stock-account-plan .button {margin-right: 8px}

@@ -185,6 +185,11 @@ export interface Results {
   'stock.status': StockExchangeStatus
   'stock.rebuild': StockExchangeRebuild
   'stock.register': StockExchangeStatus
+  'stock.accounts': StockAccountsData
+  'stock.account.export': StockAccountExport
+  'stock.account.import': StockAccountImport
+  'stock.account.activate': StockAccountPlan
+  'stock.account.remove': {removed: boolean}
   'opsi.simulator.status': OpsiSimulatorStatus
   'opsi.simulator.start': OpsiSimulatorStatus
   'opsi.simulator.stop': OpsiSimulatorStatus
@@ -261,6 +266,11 @@ export interface ResourceFlowReport {
 
 export interface StockExchangeStatus {url:string;instance:string;instanceId:string;registered:boolean;deleted?:boolean;bound:boolean;stock:{id:number;symbol:string;name:string;price:number;observedAt:number;bound:boolean}|null;bindingCode:string;message:string;lastObservedAt:number}
 export interface StockExchangeRebuild {instance:string;scope:'instance'|'all';affectedInstances:string[];rebuilt:boolean}
+export interface StockAccountRow {accountId:string;instanceId:string;username:string;stockId:number;stockUrl:string;note:string;importedAt:string;active:boolean}
+export interface StockAccountsData {instance:string;instanceId:string;accounts:StockAccountRow[]}
+export interface StockAccountExport {filename:string;content:string}
+export interface StockAccountImport {accountId:string;updated:boolean;instanceId:string;username:string;stockId:number}
+export interface StockAccountPlan {instance:string;accountId:string;currentInstanceId:string;targetInstanceId:string;username:string;stockId:number;switched:boolean;backup?:string;message:string}
 
 export interface AccountStatus {
   destroyed?: boolean

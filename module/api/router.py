@@ -91,6 +91,11 @@ class Router:
             'stock.status': Method(p.InstanceParams, lambda x: self.stock_exchange.status(x.instance)),
             'stock.rebuild': Method(p.StockRebuildParams, lambda x: self.stock_exchange.rebuild(x.instance, x.confirm, x.scope), True),
             'stock.register': Method(p.StockRegisterParams, lambda x: self.stock_exchange.register(x.instance, x.username, x.noticeVersion), True),
+            'stock.accounts': Method(p.InstanceParams, lambda x: self.stock_accounts.list(x.instance)),
+            'stock.account.export': Method(p.StockAccountExportParams, lambda x: self.stock_accounts.export(x.instance, x.accountId)),
+            'stock.account.import': Method(p.StockAccountImportParams, lambda x: self.stock_accounts.import_account(x.payload, x.note), True),
+            'stock.account.activate': Method(p.StockAccountActivateParams, lambda x: self.stock_accounts.activate(x.instance, x.accountId, x.confirm), True),
+            'stock.account.remove': Method(p.StockAccountRemoveParams, lambda x: self.stock_accounts.remove(x.accountId), True),
             'scheduler.start': Method(p.InstanceParams, lambda x: runtime.start(x.instance), True),
             'scheduler.stop': Method(p.InstanceParams, lambda x: runtime.stop(x.instance), True),
             'scheduler.program.catalog': Method(p.InstanceParams, lambda x: self.programs.catalog(x.instance)),
@@ -179,6 +184,12 @@ class Router:
                 self._stock_exchange = StockExchangeService(self.configs)
                 self._stock_exchange.start()
             return self._stock_exchange
+
+    @property
+    def stock_accounts(self):
+        """茗交所账号档案服务；无状态，随用随建。"""
+        from module.api.stock_exchange_accounts import StockAccountService
+        return StockAccountService(self.configs, self.stock_exchange)
 
     @property
     def accounts(self):

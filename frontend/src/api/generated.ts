@@ -33,6 +33,11 @@ export interface Parameters {
   "stock.status": { instance: string }
   "stock.rebuild": { instance: string; confirm?: boolean; scope?: "instance" | "all" }
   "stock.register": { instance: string; username: string; noticeVersion?: string }
+  "stock.accounts": { instance: string }
+  "stock.account.export": { instance: string; accountId?: string | null }
+  "stock.account.import": { payload: string; note?: string }
+  "stock.account.activate": { instance: string; accountId: string; confirm?: boolean }
+  "stock.account.remove": { accountId: string }
   "scheduler.start": { instance: string }
   "scheduler.stop": { instance: string }
   "scheduler.program.catalog": { instance: string }
