@@ -129,7 +129,6 @@ class Router:
             'updater.fetch': Method(p.Params, lambda _: self.updates.start('fetch'), True),
             'updater.apply': Method(p.Params, lambda _: self.updates.start('apply'), True),
             'updater.cancel': Method(p.Params, lambda _: self.updates.cancel(), True),
-            'announcement.get': Method(p.AnnouncementParams, lambda x: self.announcements.get(force=x.force)),
             'background.access': Method(p.Params, lambda _: {'token': self.background_token}),
             'background.resolve': Method(p.BackgroundUrlParams, lambda x: background.resolve(x.url)),
             'background.gallery.list': Method(p.Params, lambda _: background.gallery_list()),
@@ -204,16 +203,6 @@ class Router:
             from module.api.scheduler_service import SchedulerService
             self._scheduler_programs = SchedulerService(self.configs, self.runtime)
         return self._scheduler_programs
-
-    @property
-    def announcements(self):
-        """获取公告服务单例。
-
-        Returns:
-            AnnouncementService: 公告服务实例。
-        """
-        from module.api.announcement_service import announcement_service
-        return announcement_service
 
     @property
     def updates(self):

@@ -22,11 +22,7 @@ class ApiClient:
     
     # API端点路径
     CL1_DATA_PATH = '/api/v2/post/cl1'
-    ANNOUNCEMENT_PATH = '/api/v2/get/notice/data.json'
 
-    # 公告检查间隔（秒），1.5分钟 = 90秒
-    ANNOUNCEMENT_CHECK_INTERVAL = 90
-    
     @classmethod
     def _get_endpoints(cls, path: str) -> List[str]:
         """获取指定路径的所有端点 URL（主域名 + 备用域名）。
@@ -213,72 +209,3 @@ class ApiClient:
         """
         from module.base.async_executor import async_executor
         return async_executor.submit(cls._submit_cl1_data, data, timeout)
-
-    @classmethod
-    def get_announcement(cls, timeout: int = 1, current_id: int = None) -> Optional[Dict[str, Any]]:
-        """获取公告信息（同步）。
-        
-        Args:
-            timeout (int): 请求超时时间（秒），默认为 1 秒。
-            current_id (int | None): 当前已知公告 ID，用于增量检查。
-            
-        Returns:
-            dict[str, Any] | None: 公告数据字典；若无更新或获取失败则返回 None。
-        """
-        import time
-        try:
-            # 添加时间戳参数以绕过缓存
-            timestamp = int(time.time())
-            params = {'t': timestamp}
-            if current_id is not None:
-                params['id'] = current_id            
-            # 允许 200 (OK) 和 304 (Not Modified)
-            success, status_code, response_text = cls._request_with_fallback(
-                'GET',
-                cls.ANNOUNCEMENT_PATH,
-                params=params,
-                timeout=timeout,
-                success_codes=[200, 304]
-            )            
-            if success:
-                # 304 或空内容表示无更新
-                if status_code == 304 or not response_text.strip():
-                    return None
-                    
-                import json
-                try:
-                    data = json.loads(response_text)
-
-                    if not isinstance(data, dict) or data.get('schema_version') != 2 or 'announcement' not in data:
-                        logger.warning('[基础-API] 公告文档格式不正确')
-                        return None
-                    notice = data['announcement']
-                    if notice is None:
-                        return {}  # Explicit withdrawal; distinct from a failed request.
-                    if not isinstance(notice, dict) or not notice.get('id'):
-                        return None
-                    if str(notice['id']) == str(current_id):
-                        return None
-                    data = {**notice, 'announcementId': notice['id']}
-                    
-                    # 如果返回空字典或无ID，也视为无更新
-                    if not data or not data.get('announcementId'):
-                        logger.info('[Base] 公告数据为空或无ID')
-                        return None
-                        
-                    # 只要有标题，且有内容 OR 链接，就是有效公告
-                    if data.get('title') and (data.get('content') or data.get('url')):
-                        return data
-                    else:
-                        return None
-                except json.JSONDecodeError as e:
-                    logger.warning(f'[Base] 解析公告JSON失败: {e}, response={response_text[:100]}')
-                    return None
-            else:
-                logger.warning(f'[Base] 获取公告失败: {response_text}')
-                return None
-                
-        except Exception as e:
-            logger.warning(f'[Base] 获取公告异常: {e}')
-            return None
-

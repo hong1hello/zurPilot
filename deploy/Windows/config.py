@@ -154,11 +154,12 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         self.config.pop('AutoUpdate', None)
         self._redirect_github_repository()
         # 绕过 webui.config.DeployConfig.__setattr__()，不写入 deploy.yaml
-        super().__setattr__('GitOverCdn', self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY])
+        # 镜像通道已停用，更新一律走普通 git。 / Mirrors disabled; always plain git.
+        super().__setattr__('GitOverCdn', False)
         if self.Repository in ['global']:
             super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
-            super().__setattr__('Repository', choose_fallback_repository())
+            super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cnb']:
             super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[0])
         if self.Repository in ['gitcode']:

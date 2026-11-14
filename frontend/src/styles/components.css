@@ -571,122 +571,10 @@
 .meow-shot {font-family: var(--theme-font-mono, "JetBrains Mono", "JetBrains Mono NL", "Cascadia Code", "Consolas", "Microsoft YaHei", monospace); overflow-wrap: anywhere}
 @media (max-width: 700px) {.meow-cats {padding: 12px}.meow-axis-label {flex-basis: 100%}.meow-card-score {width: 100%; justify-content: flex-start}}
 
-/* 公告系统组件样式 */
-.announcement-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 22px 24px;
-  border-radius: var(--theme-radius-card, 16px);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: border-color .2s, box-shadow .2s;
-  overflow: hidden;
-}
-.announcement-card.is-unread {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  box-shadow: 0 4px 20px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.announcement-card.is-unread::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, var(--surface)));
-}
-.announcement-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.announcement-badge-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.announcement-icon-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.announcement-category {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-.announcement-new-tag {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--red);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1.2;
-  letter-spacing: .04em;
-  animation: pulse-badge 2s infinite ease-in-out;
-}
 @keyframes pulse-badge {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.06); opacity: .88; }
 }
-.announcement-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.announcement-read-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.announcement-read-btn:hover {
-  color: var(--accent);
-}
-.announcement-view-more {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color .15s;
-}
-.announcement-view-more:hover {
-  background: var(--accent-soft);
-}
-.announcement-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.35;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-.announcement-body {
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
 /* Markdown 渲染容器与排版 */
 .markdown-view {
   font-size: 13.5px;
@@ -1033,22 +921,6 @@
 .markdown-view li:has(input[type="checkbox"]) {
   list-style-type: none;
   margin-left: -18px;
-}
-.announcement-footer {
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.announcement-external-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* 主页公告栏样式 */
-.home-announcement-wrap {
-  margin-bottom: 24px;
 }
 .tiny-dot.red {
   background: var(--red, #e05252);

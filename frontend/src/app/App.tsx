@@ -15,7 +15,6 @@ import { api } from '../api/client'
 import { editor } from '../config/editors'
 import {bulkAction, bulkTargets} from './instanceBulk'
 import { useApp, useConnection } from './context'
-import { useAnnouncement } from './announcement'
 import { ErrorBox, Loading, Modal } from '../components/ui'
 import { GlassMaterial } from '../components/GlassMaterial'
 import { MaterialInspector } from '../components/MaterialInspector'
@@ -41,7 +40,7 @@ import { readLastPath, writeLastPath } from './topbarPrefs'
 import { INSTANCE_NAME_PATTERN } from './instanceName'
 
 /* 旧版外壳下也要显示居中页名的顶层路由。 */
-const PRIMARY_NAV_PATHS = ['/announcement', '/updater', '/interface', '/remote', '/configs', '/settings', '/dev']
+const PRIMARY_NAV_PATHS = ['/updater', '/interface', '/remote', '/configs', '/settings', '/dev']
 const SETUP_PATH = '/setup'
 
 export function CreateInstance({onClose, startWithImport = false}: {onClose: () => void; startWithImport?: boolean}) {
@@ -141,7 +140,6 @@ export function App() {
      刷新时地址栏已经是用户要停留的页面，写进去就不再改。 */
   const freshOpen = useRef((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'navigate')
   const update = useUpdater()
-  const announcement = useAnnouncement()
   usePageMotion()
   useGlassPointerLight()
   useSystemNotifications()
@@ -154,7 +152,7 @@ export function App() {
   const schedulerEditor = currentTask === SCHEDULER_EDITOR
   const stockExchange = location.pathname.endsWith('/stock-exchange')
   const currentTaskLabel = currentTask ? taskLabel(currentTask, ui, t) : ''
-  const activeSection = location.pathname === '/announcement' ? ui('nav.announcement') : location.pathname === '/settings' ? ui('nav.settings') : location.pathname === '/interface' ? ui('nav.interface') : location.pathname === '/remote' ? ui('nav.remote') : location.pathname === '/updater' ? ui('nav.updater') : location.pathname === '/configs' ? ui('nav.configs') : location.pathname === '/dev' ? ui('nav.developer') : ''
+  const activeSection = location.pathname === '/settings' ? ui('nav.settings') : location.pathname === '/interface' ? ui('nav.interface') : location.pathname === '/remote' ? ui('nav.remote') : location.pathname === '/updater' ? ui('nav.updater') : location.pathname === '/configs' ? ui('nav.configs') : location.pathname === '/dev' ? ui('nav.developer') : ''
   const entryPath = instances.length > 0 ? `/i/${encodeURIComponent(instances[0].name)}/overview` : '/configs'
   const setup = location.pathname === SETUP_PATH
   const empty = instancesLoaded && instances.length === 0
@@ -296,7 +294,7 @@ export function App() {
       <div className={`sidebar-brand ${legacyShell ? 'legacy-sidebar-actions' : ''}`.trim()}><div className="sidebar-brand-left">{brand}</div><button className="mobile-close icon-button" aria-label={ui('nav.close')} onClick={() => setMobileOpen(false)}><X size={18}/></button></div>
       <SidebarTransition viewKey={instance ? `instance:${instance}` : 'global'}>
         <nav className="primary-nav" aria-label={ui('nav.primary')}>
-          {instance ? <><NavLink to={`${base}/overview`} onClick={closeDrawer}><LayoutDashboard size={17}/>{ui('nav.overview')}</NavLink><NavLink to={`${base}/statistics`} onClick={closeDrawer}><ChartNoAxesCombined size={17}/>{ui('nav.statistics')}</NavLink><NavLink to={`${base}/stock-exchange`} onClick={closeDrawer}><Cat size={17}/>{ui('stock.name')}</NavLink></> : <><NavLink to="/announcement" onClick={closeDrawer}><Megaphone size={17}/>{ui('nav.announcement')}{announcement.unread && <span className="tiny-dot red"/>}</NavLink><NavLink to="/updater" onClick={closeDrawer}><Download size={17}/>{ui('nav.updater')}{updateAvailable && <span className="tiny-dot teal"/>}</NavLink><NavLink to="/interface" onClick={closeDrawer}><Palette size={17}/>{ui('nav.interface')}</NavLink><NavLink to="/remote" onClick={closeDrawer}><Globe size={17}/>{ui('nav.remote')}</NavLink><NavLink to="/configs" onClick={closeDrawer}><FileJson size={17}/>{ui('nav.configs')}</NavLink><NavLink to="/settings" onClick={closeDrawer}><Settings2 size={17}/>{ui('nav.settings')}</NavLink><NavLink to="/dev" onClick={closeDrawer}><Code2 size={17}/>{ui('nav.developer')}</NavLink><a className="nav-open-source" href="https://github.com/wess09/AzurPilot" target="_blank" rel="noreferrer" onClick={closeDrawer}><ExternalLink size={17}/>{ui('nav.openSource')}</a></>}
+          {instance ? <><NavLink to={`${base}/overview`} onClick={closeDrawer}><LayoutDashboard size={17}/>{ui('nav.overview')}</NavLink><NavLink to={`${base}/statistics`} onClick={closeDrawer}><ChartNoAxesCombined size={17}/>{ui('nav.statistics')}</NavLink><NavLink to={`${base}/stock-exchange`} onClick={closeDrawer}><Cat size={17}/>{ui('stock.name')}</NavLink></> : <><NavLink to="/updater" onClick={closeDrawer}><Download size={17}/>{ui('nav.updater')}{updateAvailable && <span className="tiny-dot teal"/>}</NavLink><NavLink to="/interface" onClick={closeDrawer}><Palette size={17}/>{ui('nav.interface')}</NavLink><NavLink to="/remote" onClick={closeDrawer}><Globe size={17}/>{ui('nav.remote')}</NavLink><NavLink to="/configs" onClick={closeDrawer}><FileJson size={17}/>{ui('nav.configs')}</NavLink><NavLink to="/settings" onClick={closeDrawer}><Settings2 size={17}/>{ui('nav.settings')}</NavLink><NavLink to="/dev" onClick={closeDrawer}><Code2 size={17}/>{ui('nav.developer')}</NavLink><a className="nav-open-source" href="https://github.com/hong1hello/zurPilot" target="_blank" rel="noreferrer" onClick={closeDrawer}><ExternalLink size={17}/>{ui('nav.openSource')}</a></>}
         </nav>
         {instance && <TaskNav onNavigate={closeDrawer}/>}
       </SidebarTransition>

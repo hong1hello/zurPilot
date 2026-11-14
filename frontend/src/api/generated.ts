@@ -70,7 +70,6 @@ export interface Parameters {
   "updater.fetch": Record<string, never>
   "updater.apply": Record<string, never>
   "updater.cancel": Record<string, never>
-  "announcement.get": { force?: boolean }
   "background.access": Record<string, never>
   "background.resolve": { url: string }
   "background.gallery.list": Record<string, never>

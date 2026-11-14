@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from deploy.git import GitManager
 from module.base.api_client import ApiClient
 from module.handover.handover import HANDOVER_MAINTAIN_API, OperationHandover
-from module.api.announcement_service import AnnouncementService
 from module.server_checker import SERVER_API_BASE
 
 
@@ -41,16 +40,6 @@ class CloudApiEndpointsTest(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual(status, 400)
         request.assert_called_once()
-
-    def test_announcement_keeps_root_id_contract(self):
-        notice = {'id': 'notice-test', 'title': 'test', 'content': 'body', 'url': ''}
-        response = Mock(status_code=200, text=json.dumps({'schema_version': 2, 'announcement': notice}))
-        with patch('module.base.api_client.http.get', return_value=response) as request:
-            service = AnnouncementService()
-            self.assertEqual(service.get(force=True)['announcementId'], 'notice-test')
-            self.assertEqual(request.call_args.args[0], 'https://api.azurpilot.com/api/v2/get/notice/data.json')
-            response.text = json.dumps({'schema_version': 2, 'announcement': None})
-            self.assertIsNone(service.get(force=True))
 
     def test_force_update_reads_boolean_from_new_origin(self):
         for enabled in (True, False):

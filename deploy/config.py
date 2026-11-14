@@ -8,24 +8,24 @@ from deploy.logger import logger
 from deploy.utils import *
 
 
-GIT_OVER_CDN_REPOSITORY = 'git://git.pull/AzurPilot'
-GIT_OVER_CDN_FALLBACK_REPOSITORIES = [
-    'https://cnb.cool/AzurPilot/AzurPilot',
-    'https://gitcode.com/ddl2/AzurPilot',
-]
-GIT_OVER_CDN_FALLBACK_REPOSITORY = GIT_OVER_CDN_FALLBACK_REPOSITORIES[1]
+# 本 fork：关闭云端上传与遥测的本地化版本，也是唯一允许的更新源。
+# This fork: local-only build with cloud upload and telemetry pinned off, and the
+# only update source this build accepts.
+FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
+GIT_OVER_CDN_REPOSITORY = FORK_REPOSITORY
+GIT_OVER_CDN_FALLBACK_REPOSITORIES = [FORK_REPOSITORY, FORK_REPOSITORY]
+GIT_OVER_CDN_FALLBACK_REPOSITORY = FORK_REPOSITORY
 
 
 def choose_fallback_repository() -> str:
-    """在可用的国内镜像源（CNB 与 GitCode）之间分流，避免单一镜像源流量过大引发风控。"""
-    return random.choice(GIT_OVER_CDN_FALLBACK_REPOSITORIES)
-# 上游官方仓库。只作为「是否为官方源」的判据使用（国内镜像重定向），
+    """镜像通道已停用，任何回退都指向本 fork。 / Mirrors are disabled; always this fork."""
+    return FORK_REPOSITORY
+
+
+# 上游官方仓库。只作为「是否为官方源」的判据使用（读到就替换成本 fork），
 # 不再作为默认更新源；现有测试仍以它作为官方源基准。
 # Upstream official repository. Kept only as the mirror-redirect criterion.
 GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
-# 本 fork：关闭云端上传与遥测的本地化版本。
-# This fork: local-only build with cloud upload and telemetry pinned off.
-FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
 # 隐私分支名，仅作记录；默认更新分支是 master。
 # The privacy branch name, kept for reference; the default branch is master.
 PRIVACY_BRANCH = 'privacy/local-only'
@@ -187,15 +187,15 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
             object.__setattr__(self, 'PypiMirror', 'https://mirrors.aliyun.com/pypi/simple')
             self.config['PypiMirror'] = 'https://mirrors.aliyun.com/pypi/simple'
 
-        # 绕过 webui.config.DeployConfig.__setattr__()，不写入 deploy.yaml
-        super().__setattr__(
-            'GitOverCdn',
-            self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY] and self.Branch == 'master'
-        )
+        # 绕过 webui.config.DeployConfig.__setattr__()，不写入 deploy.yaml。
+        # 镜像通道已停用：更新一律走普通 git，避免被判定成 CDN 客户端。
+        # Bypasses DeployConfig.__setattr__ so this is not written to deploy.yaml.
+        # The mirror channel is disabled, so updates always use plain git.
+        super().__setattr__('GitOverCdn', False)
         if self.Repository in ['global']:
             super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
-            super().__setattr__('Repository', choose_fallback_repository())
+            super().__setattr__('Repository', FORK_REPOSITORY)
         if self.Repository in ['cnb']:
             super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[0])
         if self.Repository in ['gitcode']:
@@ -209,7 +209,7 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         self._github_location_checked = True
         country_code = self._github_country_code
         if country_code == 'cn':
-            logger.info('检测到中国大陆网络，切换至国内 Git 更新源')
+            logger.info('检测到中国大陆网络，切换至本 fork 的 GitHub 更新源')
             object.__setattr__(self, 'Repository', GIT_OVER_CDN_REPOSITORY)
             self.config['Repository'] = GIT_OVER_CDN_REPOSITORY
         elif country_code is None:

@@ -2,10 +2,11 @@ Deploy:
   Git:
     # AzurPilot 仓库地址
     # URL of AzurPilot repository
-    # [国内用户] 使用 'cn' 或 'git://git.pull/AzurPilot' 获得国内镜像加速（内置 CNB 与 GitCode 自动同级分流），
-    #           亦可直接指定 'https://cnb.cool/AzurPilot/AzurPilot' ('cnb') 或 'https://gitcode.com/ddl2/AzurPilot' ('gitcode')
-    # [CN user] Use 'cn' or 'git://git.pull/AzurPilot' for domestic mirror acceleration (auto-balanced across CNB & GitCode),
-    #           or explicitly set 'https://cnb.cool/AzurPilot/AzurPilot' ('cnb') / 'https://gitcode.com/ddl2/AzurPilot' ('gitcode')
+    # 本构建只从下面的 fork 地址更新：官方 CNB / GitCode 镜像会拉回带云端上报的上游代码，
+    # 因此 'cn' / 'cnb' / 'gitcode' 等旧写法在运行时一律归一到该地址。
+    # This build updates only from the fork below: the official CNB / GitCode mirrors
+    # pull upstream code that carries cloud upload, so legacy 'cn' / 'cnb' / 'gitcode'
+    # values are normalised to this address at runtime.
     # [其他用户] 使用 'https://github.com/hong1hello/zurPilot'
     # [Other] Use 'https://github.com/hong1hello/zurPilot'
     Repository: https://github.com/hong1hello/zurPilot

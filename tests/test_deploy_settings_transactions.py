@@ -208,7 +208,7 @@ class DeploySettingsTransactionsTests(unittest.TestCase):
         self.assertEqual(poor_yaml_read(str(self.file))['Repository'],
                          deploy_config.GIT_OVER_CDN_REPOSITORY)
         self.assertIn(config.Repository, deploy_config.GIT_OVER_CDN_FALLBACK_REPOSITORIES)
-        self.assertTrue(config.GitOverCdn)
+        self.assertFalse(config.GitOverCdn)  # 镜像通道停用
         self.assertEqual(config.Theme, 'dark')
 
     def test_nested_transaction_and_attribute_assignment_commit_together(self):

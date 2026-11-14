@@ -49,23 +49,30 @@ class TestDeployLocation(unittest.TestCase):
         with template_patch, patch.object(config_module.DeployConfig, 'show_config'):
             return config_module.DeployConfig(str(file))
 
-    def test_china_uses_cdn_and_gitcode_fallback(self):
+    def test_china_is_redirected_to_fork(self):
         for config_module in (deploy_config, windows_config):
             with self.subTest(config_module=config_module.__name__), patch.object(
                 config_module, 'get_country_code', return_value='cn'
             ) as get_country_code:
                 config = self.make_config(config_module)
 
+                # 官方源在中国大陆会被改成 fork 地址；镜像通道停用，不走 CDN 客户端。
+                self.assertEqual(config.config['Repository'], config_module.FORK_REPOSITORY)
                 self.assertEqual(config.config['Repository'], config_module.GIT_OVER_CDN_REPOSITORY)
-                self.assertTrue(config.GitOverCdn)
+                self.assertFalse(config.GitOverCdn)
                 self.assertIn(config.Repository, config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES)
                 get_country_code.assert_called_once_with()
 
-    def test_fallback_repositories_include_cnb_and_gitcode(self):
+    def test_fallback_repositories_no_longer_point_at_official_mirrors(self):
+        """镜像通道停用：CNB / GitCode 指向官方上游，会把带云端上报的代码拉回来。"""
         for config_module in (deploy_config, windows_config):
             with self.subTest(config_module=config_module.__name__):
-                self.assertIn('https://cnb.cool/AzurPilot/AzurPilot', config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES)
-                self.assertIn('https://gitcode.com/ddl2/AzurPilot', config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES)
+                mirrors = config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES
+                self.assertTrue(mirrors)
+                for item in mirrors:
+                    self.assertEqual(item, config_module.FORK_REPOSITORY)
+                self.assertNotIn('https://cnb.cool/AzurPilot/AzurPilot', mirrors)
+                self.assertNotIn('https://gitcode.com/ddl2/AzurPilot', mirrors)
 
     def test_cnb_alias_and_repository(self):
         for config_module in (deploy_config, windows_config):

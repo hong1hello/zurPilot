@@ -121,12 +121,6 @@ export interface RemotePairing { id: string; client_id: string; code: string; pa
 export interface RemoteClient { id: string; created_at: number }
 export interface ApiEvent { v: 1; type: 'event'; topic: string; seq: number; data: unknown }
 export interface ApiResponse { v: 1; type: 'response'; id: string; ok: boolean; result?: unknown; error?: {code: string; message: string; details?: unknown} }
-export interface Announcement {
-  announcementId: string
-  title: string
-  content: string
-  url?: string
-}
 /** 背景图库条目：文件都放在服务器的 cache/background/library 下。 */
 export interface BackgroundGalleryEntry {
   id: string
@@ -206,7 +200,6 @@ export interface Results {
   'scheduler.program.state': RuntimeProgramState
   'accounts.status': AccountStatus
   'accounts.manage': AccountStatus
-  'announcement.get': Announcement | null
   'background.resolve': {final_url: string; content_type: string}
   'background.gallery.list': BackgroundGalleryEntry[]
   'background.gallery.add': {entry: BackgroundGalleryEntry}

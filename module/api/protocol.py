@@ -86,11 +86,6 @@ class AuthParams(Params):
     password: StrictStr = Field(default='', max_length=256)
 
 
-class AnnouncementParams(Params):
-    """公告查询参数模型。"""
-    force: StrictBool = False
-
-
 class SchemaParams(Params):
     """配置界面架构查询参数模型。"""
     language: Literal['zh-CN', 'en-US', 'ja-JP', 'zh-TW'] = 'zh-CN'

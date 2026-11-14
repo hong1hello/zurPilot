@@ -3174,22 +3174,6 @@
         "type": "object"
       }
     },
-    "announcement.get": {
-      "mutates": false,
-      "params": {
-        "additionalProperties": false,
-        "description": "公告查询参数模型。",
-        "properties": {
-          "force": {
-            "default": false,
-            "title": "Force",
-            "type": "boolean"
-          }
-        },
-        "title": "AnnouncementParams",
-        "type": "object"
-      }
-    },
     "background.access": {
       "mutates": false,
       "params": {

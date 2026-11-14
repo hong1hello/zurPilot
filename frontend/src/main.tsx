@@ -14,7 +14,6 @@ import { Overview } from './pages/Overview'
 import { TaskConfig } from './pages/TaskConfig'
 import { Statistics } from './pages/Statistics'
 import { Updater } from './pages/Updater'
-import { Announcement } from './pages/Announcement'
 import { InterfaceSettings } from './pages/InterfaceSettings'
 import { RemoteAccess } from './pages/RemoteAccess'
 import { Settings } from './pages/Settings'
@@ -42,7 +41,7 @@ const FleetAnalysis = lazy(() => import('./pages/FleetAnalysis').then(module => 
 const FleetSwitch = lazy(() => import('./pages/FleetSwitch').then(module => ({default: module.FleetSwitch})))
 
 const router = createHashRouter([
-  {path: '/', element: <App/>, errorElement: <ErrorPage/>, children: [{path: 'setup', element: <InstanceSetup/>}, {path: 'announcement', element: <Announcement/>}, {path: 'interface', element: <InterfaceSettings/>}, {path: 'remote', element: <RemoteAccess/>}, {path: 'settings', element: <Settings/>}, {path: 'updater', element: <Updater/>}, {path: 'configs', element: <ConfigManager/>}, {path: 'dev', element: <DevControls/>}]},
+  {path: '/', element: <App/>, errorElement: <ErrorPage/>, children: [{path: 'setup', element: <InstanceSetup/>}, {path: 'interface', element: <InterfaceSettings/>}, {path: 'remote', element: <RemoteAccess/>}, {path: 'settings', element: <Settings/>}, {path: 'updater', element: <Updater/>}, {path: 'configs', element: <ConfigManager/>}, {path: 'dev', element: <DevControls/>}]},
   {path: '/i/:instance', element: <App/>, errorElement: <ErrorPage/>, children: [
     {index: true, element: <Navigate to="overview" replace/>},
     {path: 'overview', element: <Overview/>}, {path: 'task/:task', element: <TaskConfig/>},
