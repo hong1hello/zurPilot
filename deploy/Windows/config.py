@@ -1,12 +1,11 @@
 import os
-import random
 import subprocess
 import sys
 from typing import Optional, Union
 
 from deploy.config_transaction import DeployConfigTransaction
 from deploy.Windows.logger import logger
-from deploy.Windows.utils import DEPLOY_CONFIG, DEPLOY_TEMPLATE, cached_property, poor_yaml_read
+from deploy.Windows.utils import DEPLOY_CONFIG, DEPLOY_TEMPLATE, cached_property
 
 
 GIT_OVER_CDN_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
@@ -66,6 +65,8 @@ class ConfigModel:
     GitExecutable: str = "./.venv/Scripts/git/cmd/git.exe"
     GitProxy: Optional[str] = None
     SSLVerify: bool = False
+    # 茗交所行动力上传开关；关闭后只保留本地历史，不再上报。
+    StockUploadEnabled: bool = True
 
     # Python 配置
     PythonExecutable: str = "./.venv/Scripts/python.exe"

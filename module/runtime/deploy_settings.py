@@ -30,10 +30,12 @@ class DeployField:
         key: 配置项键名。
         kind: 字段类型（string, bool, int, select, nullable_string, cdn 等）。
         options: 可选值元组。
+        default: 老配置里缺这个键时展示的默认值（只用于表单，不写回文件）。
     """
     key: str
     kind: str = "string"
     options: tuple[str, ...] = ()
+    default: Any = None
 
     @property
     def label_key(self) -> str:
@@ -119,6 +121,12 @@ DEPLOY_GROUPS: tuple[tuple[str, tuple[DeployField, ...]], ...] = (
             DeployField("WebuiSSLCert", "nullable_string"),
         ),
     ),
+    (
+        "Stock",
+        (
+            DeployField("StockUploadEnabled", "bool", default=True),
+        ),
+    ),
 )
 
 # 旧前端兼容字段定义，仅用于兼容历史 deploy.yaml，不呈现在前端配置界面中
@@ -157,7 +165,7 @@ def deploy_settings_schema(translate) -> dict[str, Any]:
                         "type": field.kind,
                         "label": translate(field.label_key),
                         "help": translate(field.help_key),
-                        "value": _value_for_api(values.get(field.key)),
+                        "value": _value_for_api(values.get(field.key, field.default)),
                         "options": list(field.options),
                     }
                     for field in fields

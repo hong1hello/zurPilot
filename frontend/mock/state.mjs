@@ -70,6 +70,15 @@ export function createMockState({ empty = false } = {}) {
     if (result.error) fail(result.code ?? 'INVALID_PARAMS', result.error)
     return result
   }
+  const stockAccounts = new Map()
+  // 每个实例有自己的派生身份，否则所有实例导出的账号看起来一模一样。
+  // 切换后会写进 activeIdentities，让列表能标出「当前」。
+  const activeIdentities = new Map()
+  const derivedIdentity = name => {
+    const digest = createHash('sha1').update('mock-instance:' + name).digest('hex')
+    return [digest.slice(0, 8), digest.slice(8, 12), digest.slice(12, 16), digest.slice(16, 20), digest.slice(20, 32)].join('-')
+  }
+  const mockInstanceId = name => activeIdentities.get(name) || derivedIdentity(name)
   const stock = createStockProxy(name=>{const r=get(name).values.Dashboard.ActionPoint;return r?.Total!=null&&r.Record?{instance:name,actionPoints:r.Total,observedAt:Math.floor(new Date(r.Record.replace(' ','T')+'Z').getTime()/1000)}:null})
   const programs = new Map()
   const simulations = new Map()
@@ -605,6 +614,58 @@ export function createMockState({ empty = false } = {}) {
       case 'stock.status': return stock.status(name)
       case 'stock.rebuild': return stock.rebuild(name,params)
       case 'stock.register': return stock.register(name,params)
+      // ---- 账号档案（mock 内存实现，仅供界面检查） ----
+      case 'stock.accounts': {
+        const currentId = mockInstanceId(name)
+        return {instance: name, instanceId: currentId,
+          accounts: [...stockAccounts.values()].map(row => ({...row, active: row.instanceId === currentId}))}
+      }
+      case 'stock.account.export': {
+        const currentId = mockInstanceId(name)
+        const row = params.accountId ? stockAccounts.get(params.accountId)
+          : [...stockAccounts.values()].find(item => item.instanceId === currentId)
+        const base = row || {instanceId: mockInstanceId(name), username: '', stockId: 0, stockUrl: 'https://stock.azurpilot.com',
+          note: '', privateKey: 'bW9jay1wcml2YXRlLWtleS0zMmJ5dGVzLTAwMDAwMDA='}
+        const content = {format: 'azurpilot-stock-account', version: 1, exportedAt: new Date().toISOString(),
+          instanceId: base.instanceId, privateKey: base.privateKey, publicKey: 'bW9jay1wdWJsaWMta2V5',
+          bindingKey: 'mock-binding-key', username: base.username || '', stockId: base.stockId || 0,
+          stockUrl: base.stockUrl || '', note: base.note || ''}
+        const label = (base.username || 'mock').replace(/[\\/]/g, '_').slice(0, 24)
+        return {filename: 'zurpilot-stock-' + label + '-' + base.instanceId.slice(0, 8) + '.json', content: JSON.stringify(content, null, 2)}
+      }
+      case 'stock.account.import': {
+        let row
+        try { row = JSON.parse(String(params.payload).replace(/^\uFEFF/, '')) }
+        catch { fail('STOCK_ACCOUNT_INVALID', '账号文件不是合法 JSON（mock 模式）') }
+        if (!row || row.format !== 'azurpilot-stock-account') fail('STOCK_ACCOUNT_INVALID', '不是 zurPilot 账号文件')
+        const importId = String(row.instanceId || '')
+        const existing = [...stockAccounts.values()].find(item => item.instanceId === importId)
+        if (existing) {
+          existing.username = row.username || existing.username
+          existing.note = params.note || existing.note
+          return {accountId: existing.accountId, updated: true, instanceId: importId, username: existing.username, stockId: existing.stockId || 0}
+        }
+        const accountId = 'mock-' + Math.random().toString(16).slice(2, 10)
+        stockAccounts.set(accountId, {accountId, instanceId: importId, username: row.username || '',
+          stockId: row.stockId || 0, stockUrl: row.stockUrl || '', note: params.note || '',
+          importedAt: new Date().toISOString(), privateKey: row.privateKey || 'bW9jaw=='})
+        return {accountId, updated: false, instanceId: importId, username: row.username || '', stockId: row.stockId || 0}
+      }
+      case 'stock.account.activate': {
+        const target = stockAccounts.get(params.accountId)
+        if (!target) fail('NOT_FOUND', '账号档案不存在')
+        if (!params.confirm) return {instance: name, accountId: params.accountId, currentInstanceId: mockInstanceId(name),
+          targetInstanceId: target.instanceId, username: target.username, stockId: target.stockId, switched: false,
+          message: '切换后本实例的 identity 会变为该账号，历史资源与调度历史按新身份重新归属'}
+        activeIdentities.set(name, target.instanceId)
+        return {instance: name, accountId: params.accountId, currentInstanceId: target.instanceId,
+          targetInstanceId: target.instanceId, username: target.username, stockId: target.stockId, switched: true,
+          backup: 'config/backup/stock-switch-mock', message: '已切换账号（mock 模式，仅界面演示）'}
+      }
+      case 'stock.account.remove': {
+        stockAccounts.delete(params.accountId)
+        return {removed: true}
+      }
       case 'scheduler.start': case 'tasks.run':
         if (get(name).status === 'running') fail('INSTANCE_RUNNING', '实例已在运行')
         if (method === 'tasks.run' && !['FleetScan', 'StorageStatistics', 'DockScan'].includes(params.task) && !Object.values(menu).some(group => group.page === 'tool' && group.tasks.includes(params.task))) fail('INVALID_PARAMS', '该任务不支持单独运行')

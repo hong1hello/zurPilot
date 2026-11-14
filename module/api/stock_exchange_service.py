@@ -29,6 +29,15 @@ def exchange_url():
     return value
 
 
+def stock_upload_enabled():
+    """读取系统设置里的行动力上传开关；读不到配置时按开启处理。"""
+    try:
+        from module.runtime.setting import State
+        return bool(getattr(State.deploy_config, 'StockUploadEnabled', True))
+    except Exception:
+        return True
+
+
 def account_operation(method):
     """重建与后台同步互斥，避免旧身份在重建后继续上传。"""
     @wraps(method)
@@ -408,6 +417,10 @@ class StockExchangeService:
                 database = Path(self.configs.root) / 'config' / 'scheduler' / (instance + '.sqlite3')
                 self.history.capture(instance, data, database, force=True)
             if not force and not self.history.ready(instance):
+                return
+            # 开关只管上报：状态查询和绑定信息照常刷新。
+            if not stock_upload_enabled():
+                self.statuses[instance] = '行动力上传已在系统设置中关闭'
                 return
             identity, key = self._identity(instance)
             self.history.synchronize(instance, identity, key, binding, self._remote, self._accepted, force)

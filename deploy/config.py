@@ -1,4 +1,3 @@
-import random
 import sys
 from typing import Optional, Union
 
@@ -77,6 +76,8 @@ class ConfigModel:
     GitExecutable: str = "./.venv/Scripts/git/cmd/git.exe" if sys.platform == "win32" else "./.venv/bin/git"
     GitProxy: Optional[str] = None
     SSLVerify: bool = False
+    # 茗交所行动力上传开关；关闭后只保留本地历史，不再上报。
+    StockUploadEnabled: bool = True
 
     # Python 配置
     PythonExecutable: str = "./.venv/Scripts/python.exe" if sys.platform == "win32" else "./.venv/bin/python"

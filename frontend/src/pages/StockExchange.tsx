@@ -115,7 +115,7 @@ function StockAccounts({instance,connection,onSwitched}:{instance:string;connect
     try{
       const result=await api.request('stock.account.import',{payload:await readAccountFile(selected),note}) as StockAccountImport
       const label=result.username||result.instanceId.slice(0,8)
-      setNotice(result.updated?`已更新账号 ${label}`:`已导入账号 ${label}`)
+      setNotice(result.updated?`已更新账号 ${label}：身份与已有档案相同，列表不会新增行`:`已导入账号 ${label}`)
       setNote('');await load()
     }catch(error){setError((error as Error).message)}finally{setBusy(false);if(file.current)file.current.value=''}
   }
@@ -135,7 +135,7 @@ function StockAccounts({instance,connection,onSwitched}:{instance:string;connect
     <div className="panel-heading"><h2>账号档案</h2><span className="muted">导出 · 导入 · 切换</span></div>
     {error&&<ErrorBox message={error}/>}
     {notice&&<p role="status">{notice}</p>}
-    <p className="muted">导出文件包含本实例的 Ed25519 私钥，等同于账号本身：泄露即可被冒充，丢失则原身份无法再上传。切换会改写实例 identity，历史资源按新身份重新归属，操作前会自动备份到 config/backup/。</p>
+    <p className="muted">导出文件包含本实例的 Ed25519 私钥，等同于账号本身：泄露即可被冒充，丢失则原身份无法再上传。档案属于整个安装，任何实例都能看到并切换使用——「身份」列是导出时那个实例的身份，不同实例导出的是不同的值。切换会改写实例 identity，历史资源按新身份重新归属，操作前会自动备份到 config/backup/。</p>
     <div className="stock-account-actions">
       <button className="button" disabled={busy} onClick={()=>void download()}>导出当前账号</button>
       <input ref={file} type="file" accept="application/json,.json" hidden onChange={event=>void upload(event.target.files?.[0])}/>
