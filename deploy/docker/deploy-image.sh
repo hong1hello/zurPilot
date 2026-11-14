@@ -23,7 +23,9 @@ detect_owner_home() {
     printf '%s\n' "${HOME}"
 }
 
-REPOSITORY="${REPOSITORY:-https://gitcode.com/ddl2/AzurPilot}"
+# 只从本 fork 更新：官方镜像源带云端上报与遥测。
+# Update from this fork only: the official mirrors carry cloud upload and telemetry.
+REPOSITORY="${REPOSITORY:-https://github.com/hong1hello/zurPilot}"
 IMAGE="${IMAGE:-crpi-gukwnnx8iuh9qpez.cn-shanghai.personal.cr.aliyuncs.com/hajiming/ap:latest}"
 OWNER_HOME="${OWNER_HOME:-$(detect_owner_home)}"
 APP_DIR="${APP_DIR:-${OWNER_HOME}/AP}"

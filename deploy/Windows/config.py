@@ -10,13 +10,14 @@ from deploy.Windows.logger import logger
 from deploy.Windows.utils import DEPLOY_CONFIG, DEPLOY_TEMPLATE, cached_property, poor_yaml_read
 
 
-GIT_OVER_CDN_REPOSITORY = 'git://git.pull/AzurPilot'
-# 上游官方仓库。只作为「是否为官方源」的判据使用（国内镜像重定向），
+GIT_OVER_CDN_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
+# 上游官方仓库。只作为「是否为官方源」的判据使用（读到就替换成本 fork），
 # 不再作为默认更新源；现有测试仍以它作为官方源基准。
 # Upstream official repository. Kept only as the mirror-redirect criterion.
 GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
-# 本 fork：关闭云端上传与遥测的本地化版本。
-# This fork: local-only build with cloud upload and telemetry pinned off.
+# 本 fork：关闭云端上传与遥测的本地化版本，也是唯一允许的更新源。
+# This fork: local-only build with cloud upload and telemetry pinned off, and the
+# only update source this build accepts.
 FORK_REPOSITORY = 'https://github.com/hong1hello/zurPilot'
 # 隐私分支名，仅作记录；默认更新分支是 master。
 # The privacy branch name, kept for reference; the default branch is master.
@@ -24,16 +25,18 @@ PRIVACY_BRANCH = 'privacy/local-only'
 # 默认跟踪的分支。
 # Default tracked branch.
 DEFAULT_BRANCH = 'master'
-GIT_OVER_CDN_FALLBACK_REPOSITORIES = [
-    'https://cnb.cool/AzurPilot/AzurPilot',
-    'https://gitcode.com/ddl2/AzurPilot',
-]
-GIT_OVER_CDN_FALLBACK_REPOSITORY = GIT_OVER_CDN_FALLBACK_REPOSITORIES[1]
+# 国内镜像通道已停用：CNB / GitCode 镜像都指向官方上游，会把带云端上传与遥测的
+# 代码拉回来。保留名字是因为更新器仍在引用，取值一律收敛到本 fork。
+# The domestic mirror channel is disabled: the CNB / GitCode mirrors point at the
+# official upstream which carries cloud upload and telemetry. The names are kept
+# because the updater still references them, but they resolve to this fork.
+GIT_OVER_CDN_FALLBACK_REPOSITORIES = [FORK_REPOSITORY, FORK_REPOSITORY]
+GIT_OVER_CDN_FALLBACK_REPOSITORY = FORK_REPOSITORY
 
 
 def choose_fallback_repository() -> str:
-    """在可用的国内镜像源（CNB 与 GitCode）之间分流，避免单一镜像源流量过大引发风控。"""
-    return random.choice(GIT_OVER_CDN_FALLBACK_REPOSITORIES)
+    """镜像通道已停用，任何回退都指向本 fork。 / Mirrors are disabled; always this fork."""
+    return FORK_REPOSITORY
 
 
 class ExecutionError(Exception):
