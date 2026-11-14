@@ -17,6 +17,7 @@ export function Settings() {
   return (
     <>
       <PageTitle title={ui('nav.settings')} />
+      <p className="muted build-badge">{ui('settings.buildBadge')}</p>
       {error && <ErrorBox message={error} />}
       {edits.storageError && <ErrorBox message={edits.storageError} />}
       <LauncherCard/>

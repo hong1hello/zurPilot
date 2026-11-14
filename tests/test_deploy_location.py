@@ -49,19 +49,39 @@ class TestDeployLocation(unittest.TestCase):
         with template_patch, patch.object(config_module.DeployConfig, 'show_config'):
             return config_module.DeployConfig(str(file))
 
-    def test_china_is_redirected_to_fork(self):
+    def test_official_repository_is_redirected_to_fork(self):
         for config_module in (deploy_config, windows_config):
-            with self.subTest(config_module=config_module.__name__), patch.object(
-                config_module, 'get_country_code', return_value='cn'
-            ) as get_country_code:
+            with self.subTest(config_module=config_module.__name__):
                 config = self.make_config(config_module)
 
-                # 官方源在中国大陆会被改成 fork 地址；镜像通道停用，不走 CDN 客户端。
+                # 官方地址不再按网络位置分流，一律归一；设置页读的是 config，必须一起改，
+                # 否则界面会继续显示官方地址。
+                self.assertEqual(config.Repository, config_module.FORK_REPOSITORY)
                 self.assertEqual(config.config['Repository'], config_module.FORK_REPOSITORY)
                 self.assertEqual(config.config['Repository'], config_module.GIT_OVER_CDN_REPOSITORY)
                 self.assertFalse(config.GitOverCdn)
                 self.assertIn(config.Repository, config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES)
-                get_country_code.assert_called_once_with()
+
+    def test_legacy_sources_are_redirected_to_fork(self):
+        """旧 pull 别名、官方镜像与官方地址都要归一，并写进 config 供设置页显示。"""
+        legacy_sources = (
+            'git://git.pull/AzurPilot',
+            'https://cnb.cool/AzurPilot/AzurPilot',
+            'https://gitcode.com/ddl2/AzurPilot',
+            'cn',
+            'cnb',
+            'gitcode',
+            'global',
+            deploy_config.GITHUB_REPOSITORY,
+        )
+        for config_module in (deploy_config, windows_config):
+            for source in legacy_sources:
+                with self.subTest(config_module=config_module.__name__, source=source):
+                    config = self.make_config(config_module, source)
+                    config.config_redirect()
+
+                    self.assertEqual(config.Repository, config_module.FORK_REPOSITORY)
+                    self.assertEqual(config.config['Repository'], config_module.FORK_REPOSITORY)
 
     def test_fallback_repositories_no_longer_point_at_official_mirrors(self):
         """镜像通道停用：CNB / GitCode 指向官方上游，会把带云端上报的代码拉回来。"""
@@ -88,43 +108,26 @@ class TestDeployLocation(unittest.TestCase):
                 config.config_redirect()
                 self.assertEqual(config.Repository, config_module.GIT_OVER_CDN_FALLBACK_REPOSITORIES[1])
 
-    def test_non_china_keeps_github_and_only_checks_once(self):
+    def test_redirect_is_idempotent(self):
         for config_module in (deploy_config, windows_config):
-            with self.subTest(config_module=config_module.__name__), patch.object(
-                config_module, 'get_country_code', return_value='us'
-            ) as get_country_code:
+            with self.subTest(config_module=config_module.__name__):
                 config = self.make_config(config_module)
 
                 config.config_redirect()
                 config.config_redirect()
 
-                self.assertEqual(config.config['Repository'], config_module.GITHUB_REPOSITORY)
-                self.assertFalse(config.GitOverCdn)
-                self.assertEqual(config.Repository, config_module.GITHUB_REPOSITORY)
-                get_country_code.assert_called_once_with()
-
-    def test_failed_lookup_keeps_github(self):
-        for config_module in (deploy_config, windows_config):
-            with self.subTest(config_module=config_module.__name__), patch.object(
-                config_module, 'get_country_code', return_value=None
-            ):
-                config = self.make_config(config_module)
-
-                config.config_redirect()
-
-                self.assertEqual(config.config['Repository'], config_module.GITHUB_REPOSITORY)
+                self.assertEqual(config.Repository, config_module.FORK_REPOSITORY)
                 self.assertFalse(config.GitOverCdn)
 
-    def test_custom_repository_does_not_query_location(self):
+    def test_custom_repository_is_kept(self):
+        """用户自己填的第三方地址不改写，只归一已知的官方源。"""
         for config_module in (deploy_config, windows_config):
-            with self.subTest(config_module=config_module.__name__), patch.object(
-                config_module, 'get_country_code'
-            ) as get_country_code:
+            with self.subTest(config_module=config_module.__name__):
                 config = self.make_config(config_module, 'https://github.com/example/custom')
 
                 config.config_redirect()
 
-                get_country_code.assert_not_called()
+                self.assertEqual(config.Repository, 'https://github.com/example/custom')
 
     def test_peer_fallback_repository(self):
         for git_mod in (deploy_git, windows_git):

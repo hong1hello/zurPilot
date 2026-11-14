@@ -2,7 +2,6 @@ import random
 import sys
 from typing import Optional, Union
 
-from deploy.geo import get_country_code
 from deploy.config_transaction import DeployConfigTransaction
 from deploy.logger import logger
 from deploy.utils import *
@@ -32,6 +31,20 @@ PRIVACY_BRANCH = 'privacy/local-only'
 # 默认跟踪的分支。
 # Default tracked branch.
 DEFAULT_BRANCH = 'master'
+# 旧配置里可能出现的更新源写法：官方地址、官方国内镜像、历史上的 pull 别名。
+# 它们都会把带云端上报与遥测的上游代码拉回来，读到就统一归一到本 fork。
+# Legacy update sources — the official repo, its CN mirrors and the old pull alias.
+# They would pull upstream code that carries cloud upload, so they are normalised.
+LEGACY_REPOSITORIES = (
+    'global',
+    'cn',
+    'cnb',
+    'gitcode',
+    'git://git.pull/AzurPilot',
+    'https://cnb.cool/AzurPilot/AzurPilot',
+    'https://gitcode.com/ddl2/AzurPilot',
+    GITHUB_REPOSITORY,
+)
 
 
 class ErrorCodes:
@@ -137,11 +150,6 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         self.template_file = get_deploy_template()
         self.config = {}
         self.config_template = {}
-        self._github_location_checked = False
-        # 地区查询可能等待网络；预读仅用于查询，事务内仍重新读取最新配置。
-        values = {**poor_yaml_read(self.template_file), **poor_yaml_read(self.file)}
-        self._github_country_code = (get_country_code()
-                                     if values.get('Repository') == GITHUB_REPOSITORY else None)
         self.read()
 
         self.show_config()
@@ -164,7 +172,16 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         每次 `read()` 之后必须调用。
         """
         self.config.pop('AutoUpdate', None)
-        self._redirect_github_repository()
+        # 旧配置里的官方地址 / 官方镜像 / 旧 pull 别名一律归一到本 fork，并同步内存里的
+        # config 副本：系统设置页读的是 config，只改属性会让界面继续显示官方地址。
+        # 这里不落盘（没走 __setattr__ 的写盘路径），用户保存设置时才写回文件。
+        # Legacy official sources are normalised to this fork and mirrored into the
+        # in-memory config because the settings page renders `config`, not the
+        # attribute. Nothing is written to deploy.yaml until the user saves.
+        if self.Repository in LEGACY_REPOSITORIES:
+            logger.info(f'更新源 {self.Repository} 已归一为 {FORK_REPOSITORY}')
+            object.__setattr__(self, 'Repository', FORK_REPOSITORY)
+            self.config['Repository'] = FORK_REPOSITORY
         if self.Repository in [
             'https://gitee.com/LmeSzinc/AzurLaneAutoScript',
             'https://gitee.com/lmeszinc/azur-lane-auto-script-mirror',
@@ -179,8 +196,8 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
             'https://git.nanoda.work/git/AzurPilot',
             'https://git.nanoda.work',
         ]:
-            object.__setattr__(self, 'Repository', GIT_OVER_CDN_REPOSITORY)
-            self.config['Repository'] = GIT_OVER_CDN_REPOSITORY
+            object.__setattr__(self, 'Repository', FORK_REPOSITORY)
+            self.config['Repository'] = FORK_REPOSITORY
         if self.PypiMirror in [
             'https://pypi.tuna.tsinghua.edu.cn/simple'
         ]:
@@ -192,30 +209,6 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         # Bypasses DeployConfig.__setattr__ so this is not written to deploy.yaml.
         # The mirror channel is disabled, so updates always use plain git.
         super().__setattr__('GitOverCdn', False)
-        if self.Repository in ['global']:
-            super().__setattr__('Repository', FORK_REPOSITORY)
-        if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
-            super().__setattr__('Repository', FORK_REPOSITORY)
-        if self.Repository in ['cnb']:
-            super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[0])
-        if self.Repository in ['gitcode']:
-            super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[1])
-
-    def _redirect_github_repository(self):
-        """为官方 GitHub 源一次性选择适合当前网络的更新镜像。"""
-        if self._github_location_checked or self.Repository != GITHUB_REPOSITORY:
-            return
-
-        self._github_location_checked = True
-        country_code = self._github_country_code
-        if country_code == 'cn':
-            logger.info('检测到中国大陆网络，切换至本 fork 的 GitHub 更新源')
-            object.__setattr__(self, 'Repository', GIT_OVER_CDN_REPOSITORY)
-            self.config['Repository'] = GIT_OVER_CDN_REPOSITORY
-        elif country_code is None:
-            logger.warning('无法检测网络所在国家，保留 GitHub 更新源')
-        else:
-            logger.info('当前网络不在中国大陆，保留 GitHub 更新源')
 
     def filepath(self, key):
         """根据配置键获取绝对文件路径。

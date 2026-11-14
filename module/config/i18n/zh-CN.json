@@ -7910,7 +7910,7 @@
       "GroupRemoteAccess": "远程访问",
       "GroupWebui": "WebUI 配置",
       "Repository": "AzurPilot 仓库地址",
-      "RepositoryHelp": "用于更新和安装的 Git 仓库地址。本构建只支持 https://github.com/hong1hello/zurPilot ，旧地址会自动归一。",
+      "RepositoryHelp": "用于更新和安装的 Git 仓库地址。hong1hello 修改版只从 https://github.com/hong1hello/zurPilot 更新，官方地址与国内镜像会在读取时自动归一。",
       "Branch": "分支",
       "BranchHelp": "稳定版通常使用 master，开发或测试可填写 dev、app 等分支。",
       "GitExecutable": "Git 可执行文件",

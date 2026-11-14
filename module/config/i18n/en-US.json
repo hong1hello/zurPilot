@@ -7910,7 +7910,7 @@
       "GroupRemoteAccess": "Remote Access",
       "GroupWebui": "WebUI",
       "Repository": "AzurPilot Repository",
-      "RepositoryHelp": "Git repository used for install and update. This build only supports https://github.com/hong1hello/zurPilot; legacy values are normalised.",
+      "RepositoryHelp": "Git repository used for install and update. The hong1hello build only updates from https://github.com/hong1hello/zurPilot; official URLs and CN mirrors are normalised on read.",
       "Branch": "Branch",
       "BranchHelp": "Use master for stable releases, or dev/app for testing.",
       "GitExecutable": "Git Executable",

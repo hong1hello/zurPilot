@@ -111,7 +111,8 @@ class DeploySettingsTransactionsTests(unittest.TestCase):
         self.assertEqual(second, {'updated': ['WebuiPort']})
         self.assert_saved(Theme='dark', WebuiPort=30001)
 
-    def test_parallel_startup_does_not_hold_config_lock_during_location_lookup(self):
+    def test_parallel_startup_normalises_repository_without_writing_disk(self):
+        """并发启动时每个实例都把官方地址归一到 fork，但都不写盘。"""
         for config_module in (deploy_config, windows_config):
             with self.subTest(config_module=config_module.__name__):
                 text = TEMPLATE.replace('https://example.invalid/custom', config_module.GITHUB_REPOSITORY)
@@ -119,16 +120,17 @@ class DeploySettingsTransactionsTests(unittest.TestCase):
                 self.template.write_text(text)
                 barrier = threading.Barrier(8, timeout=5)
 
-                def lookup():
+                def build(_):
                     barrier.wait()
-                    return 'us'
+                    return config_module.DeployConfig(str(self.file))
 
-                with patch.object(config_module, 'get_country_code', side_effect=lookup) as locate, \
-                        ThreadPoolExecutor(max_workers=8) as executor:
-                    configs = list(executor.map(lambda _: config_module.DeployConfig(str(self.file)), range(8)))
-                self.assertEqual(locate.call_count, 8)
-                self.assertTrue(all(config.Repository == config_module.GITHUB_REPOSITORY for config in configs))
-                self.assertEqual(poor_yaml_read(str(self.file))['Repository'], config_module.GITHUB_REPOSITORY)
+                with ThreadPoolExecutor(max_workers=8) as executor:
+                    configs = list(executor.map(build, range(8)))
+
+                self.assertTrue(all(config.Repository == config_module.FORK_REPOSITORY for config in configs))
+                # 归一属于既有迁移机制：read() 发现 config 与磁盘不同就写回，
+                # 所以老设备的 deploy.yaml 会被一次性修正成 fork，设置页随后读到的也是这个值。
+                self.assertEqual(poor_yaml_read(str(self.file))['Repository'], config_module.FORK_REPOSITORY)
 
     def test_concurrent_startup_additions_preserve_both_instances(self):
         self.race(lambda: deploy_settings.set_startup_run('account_a', True),
