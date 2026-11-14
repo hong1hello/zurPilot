@@ -1,0 +1,123 @@
+name: Windows exe installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create a GitHub Release with the installer zip
+        required: false
+        default: true
+        type: boolean
+      python_version:
+        description: Portable Python version bundled into the package
+        required: false
+        default: '3.13'
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    timeout-minutes: 90
+    env:
+      COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller uv
+
+      - name: Build the launcher exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pyinstaller --onefile --noconsole --name AzurPilot `
+            --distpath dist --workpath .build --specpath .build `
+            dev_tools/windows_launcher.py
+          if (-not (Test-Path -LiteralPath 'dist/AzurPilot.exe')) {
+            throw 'launcher exe was not produced'
+          }
+          $size = (Get-Item -LiteralPath 'dist/AzurPilot.exe').Length
+          Write-Host ("launcher size: {0:N2} MB" -f ($size / 1MB))
+          # 启动器只依赖标准库；体积异常说明误收了 cv2/numpy 之类的重依赖
+          if ($size -gt 40MB) { throw 'launcher is unexpectedly large' }
+
+      - name: Assemble the Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = 'stage/AzurPilot-Windows'
+          New-Item -ItemType Directory -Force -Path "$stage/runtime", "$stage/app" | Out-Null
+          Copy-Item -LiteralPath 'dist/AzurPilot.exe' -Destination "$stage/AzurPilot.exe"
+
+          # 便携 Python：复制 setup-python 的解释器目录（含 DLLs / Lib）
+          $pythonDir = Split-Path -Parent (Get-Command python).Source
+          Copy-Item -Path "$pythonDir/*" -Destination "$stage/runtime/" -Recurse -Force
+          # uv 是单文件 exe，gui.py 会用它做依赖同步
+          Copy-Item -LiteralPath (Get-Command uv).Source -Destination "$stage/runtime/uv.exe"
+
+          # 源码：保留 assets 与运行时所需文件，排除开发/历史/临时目录
+          robocopy . "$stage/app" /E /NFL /NDL /NJH /NJS /NP `
+            /XD .git dev_tools tests logs .tmp config screenshots node_modules .build dist stage `
+            /XF *.pyc *.log | Out-Null
+          # robocopy 0-7 都是成功（1 表示复制了文件），>=8 才是错误
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with $LASTEXITCODE" }
+
+          $readme = @(
+            'AzurPilot Windows 便携安装包',
+            '',
+            '双击 AzurPilot.exe 启动。首次启动会由 gui.py 调用 uv sync 安装依赖，',
+            '需要几分钟，期间窗口会显示日志。启动后会自动打开 http://127.0.0.1:22365',
+            '',
+            '目录说明：',
+            '  AzurPilot.exe  轻量启动器（仅标准库，不含重依赖）',
+            '  runtime/       便携 Python + uv.exe',
+            '  app/           zurPilot 源码（含 pyproject.toml / uv.lock / assets）',
+            '',
+            '请保持整个目录结构完整，不要单独移动 exe。'
+          )
+          $readme | Set-Content -LiteralPath "$stage/README.txt" -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path 'dist-pkg' | Out-Null
+          $short = $env:COMMIT_SHA.Substring(0, 8)
+          $zip = "dist-pkg/AzurPilot-Windows-$short.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path -Path $zip -Leaf)" |
+            Set-Content -LiteralPath 'dist-pkg/SHA256SUMS.txt' -Encoding ascii
+          "ZIP_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host ("package size: {0:N2} MB" -f ((Get-Item $zip).Length / 1MB))
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzurPilot-Windows-installer
+          path: dist-pkg/*
+          if-no-files-found: error
+
+      - name: Publish release
+        if: ${{ inputs.publish }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $short = $env:COMMIT_SHA.Substring(0, 8)
+          $tag = "windows-exe-$short"
+          $assets = @(Get-ChildItem -LiteralPath 'dist-pkg' -File | ForEach-Object { $_.FullName })
+          gh release create $tag $assets --repo $env:GITHUB_REPOSITORY `
+            --title "AzurPilot Windows installer ($short)" `
+            --notes "Windows 便携安装包：轻量启动器 exe + 便携 Python + zurPilot 源码。双击 AzurPilot.exe 启动，首次启动由 uv 同步依赖。"
