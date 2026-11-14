@@ -475,7 +475,16 @@ def record_research_drop(images: t.Sequence[np.ndarray], instance: str, imgid: s
         with _parser_lock:
             parser = get_parser()
             grid = parser.stats._target_grid()
-            drop = parser.parse(images)
+            from module.statistics.reward_templates import (
+                cached_reward_templates, local_drop_directory,
+            )
+
+            grid.item_resolver = cached_reward_templates(
+                local_drop_directory(instance)).identify
+            try:
+                drop = parser.parse(images)
+            finally:
+                grid.item_resolver = None
     except Exception as e:
         logger.warning(f'[科研统计] 解析失败，跳过本次记录: {e}')
         return None

@@ -112,6 +112,12 @@ class CommissionReader:
         self.stats = GetItemsStatistics()
         self.stats.grid = ItemGrid(None, {})
         self.stats.grid.load_template_folder('./assets/stats_commission_items')
+        from module.statistics.reward_templates import (
+            cached_reward_templates, local_drop_directory,
+        )
+
+        self.stats.grid.item_resolver = cached_reward_templates(
+            local_drop_directory(config.config_name)).identify
         self.stats.grid.amount_ocr = CommissionAmount([], threshold=96, name='Commission_cloud_amount')
         self.stats.amount_area = (50, 72, 94, 94)
 

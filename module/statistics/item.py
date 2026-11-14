@@ -800,8 +800,15 @@ class ItemGrid:
         self._load_image(image)
         if name:
             name_list = [self.match_template(item.image) for item in self.items]
+            resolver = getattr(self, 'item_resolver', None)
             for item, n in zip(self.items, name_list):
                 item.name = n
+                if resolver is not None:
+                    try:
+                        # 已确认的标准 ID 可包含数字后缀，直接保留。
+                        item._name, item.source_template_id = resolver(item.image, item.name)
+                    except (ValueError, IndexError) as error:
+                        logger.debug(f'[掉落统计] 本地模板识别跳过：{type(error).__name__}')
         if amount:
             amount_images = [item.crop(self.amount_area_for(item.name)) for item in self.items]
             item_names = [item.name for item in self.items]
