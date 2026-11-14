@@ -129,21 +129,19 @@ class TestDeployLocation(unittest.TestCase):
     def test_peer_fallback_repository(self):
         for git_mod in (deploy_git, windows_git):
             with self.subTest(git_module=git_mod.__name__):
-                self.assertEqual(
+                # 镜像通道停用：官方 CNB / GitCode 已不在回退列表里，没有可切换的 peer，
+                # 更新失败时不会再被悄悄指回官方镜像。
+                # The mirror channel is disabled, so the official mirrors have no peer.
+                self.assertIsNone(
                     git_mod.peer_fallback_repository('https://cnb.cool/AzurPilot/AzurPilot'),
-                    'https://gitcode.com/ddl2/AzurPilot',
                 )
-                self.assertEqual(
-                    git_mod.peer_fallback_repository('https://cnb.cool/AzurPilot/AzurPilot.git'),
-                    'https://gitcode.com/ddl2/AzurPilot',
-                )
-                self.assertEqual(
+                self.assertIsNone(
                     git_mod.peer_fallback_repository('https://gitcode.com/ddl2/AzurPilot'),
-                    'https://cnb.cool/AzurPilot/AzurPilot',
                 )
+                # 列表里只剩本 fork：它是自己的 peer，函数仍按环形规则返回自身。
                 self.assertEqual(
-                    git_mod.peer_fallback_repository('https://gitcode.com/ddl2/AzurPilot.git'),
-                    'https://cnb.cool/AzurPilot/AzurPilot',
+                    git_mod.peer_fallback_repository('https://github.com/hong1hello/zurPilot'),
+                    'https://github.com/hong1hello/zurPilot',
                 )
                 self.assertIsNone(git_mod.peer_fallback_repository('https://github.com/wess09/AzurPilot'))
                 self.assertIsNone(git_mod.peer_fallback_repository(''))
