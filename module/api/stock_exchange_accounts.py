@@ -9,13 +9,12 @@
 """
 import base64
 import json
-import os
 import shutil
 import uuid
 from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
 
 from deploy.atomic import atomic_write
 from module.api.protocol import ApiError
@@ -147,13 +146,18 @@ class StockAccountService:
         return {'filename': name, 'content': json.dumps(payload, ensure_ascii=False, indent=2)}
 
     def _snapshot_current(self, instance, identity):
-        """把实例当前身份读成档案行，不写盘。"""
-        key_data = self.protection.read_file('identities/' + identity + '.json')
-        if not isinstance(key_data, dict) or key_data.get('privateKey') is None:
-            raise ApiError('STOCK_IDENTITY_DAMAGED', '实例交易身份损坏，请恢复备份')
+        """把实例当前身份读成档案行，不写盘。
+
+        私钥可能还没落盘（`resolve()` 只登记身份，密钥由 `load_identity()` 首次生成），
+        所以这里走一遍 `load_identity`，避免把"尚未生成"误判成"已损坏"。
+        """
+        from module.api.stock_exchange_identity import load_identity
+        identity, key = load_identity(self.configs.root, instance)
+        private = base64.b64encode(
+            key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())).decode()
         binding = self._binding().get(identity) or {}
         return {'accountId': str(uuid.uuid4()), 'instanceId': identity,
-                'privateKey': key_data['privateKey'], 'username': binding.get('username') or '',
+                'privateKey': private, 'username': binding.get('username') or '',
                 'stockId': binding.get('stockId') or 0, 'stockUrl': binding.get('url') or '',
                 'note': '', 'importedAt': _now()}
 
@@ -264,32 +268,35 @@ class StockAccountService:
             raise ApiError('STOCK_ACCOUNT_DAMAGED', '私钥损坏，无法切换')
         target = row['instanceId']
 
-        with self.protection.transaction() as (state, _):
-            config_path = self.configs.path(instance)
+        # 先写文件、再改登记状态：写文件内部会更新 files 登记，如果套在外层
+        # transaction 里，外层退出时的旧 state 快照会把登记覆盖掉。
+        config_path = self.configs.path(instance)
+        with config_transaction(config_path):
             content = json.loads(config_path.read_bytes())
             if not isinstance(content, dict) or not isinstance(content.get('Alas'), dict):
                 raise ApiError('CONFIG_INVALID', '实例配置损坏，请先修复配置')
-            with config_transaction(config_path):
-                backup = self._backup(instance, config_path)
-                self.protection.write_file('identities/' + target + '.json',
-                                           {'instanceId': target, 'privateKey': row['privateKey']})
-                binding = self._binding()
-                if row.get('stockId') and row.get('stockUrl'):
-                    binding[target] = {'stockId': int(row['stockId']), 'username': row.get('username') or '',
-                                       'bindingKey': binding_key(target, key), 'url': row['stockUrl'],
-                                       'capabilities': []}
-                    self.protection.write_file(REGISTRY, binding)
-                previous = content.get(INSTANCE_FIELD)
-                content[INSTANCE_FIELD] = target
-                atomic_write(str(config_path), json.dumps(content, ensure_ascii=False, indent=2))
-                predecessors = [k for k, v in state['instances'].items() if v.get('name') == instance]
-                state['instances'][target] = {
-                    'name': instance, 'active': True, 'schedulerName': instance, 'legacy': False,
-                    'predecessor': predecessors[-1] if predecessors else None,
-                    'baseline': False, 'legacyStatsName': None,
-                }
-                if previous and previous != target and previous in state['instances']:
-                    state['instances'][previous]['active'] = False
+            backup = self._backup(instance, config_path)
+            self.protection.write_file('identities/' + target + '.json',
+                                       {'instanceId': target, 'privateKey': row['privateKey']})
+            binding = self._binding()
+            if row.get('stockId') and row.get('stockUrl'):
+                binding[target] = {'stockId': int(row['stockId']), 'username': row.get('username') or '',
+                                   'bindingKey': binding_key(target, key), 'url': row['stockUrl'],
+                                   'capabilities': []}
+                self.protection.write_file(REGISTRY, binding)
+            previous = content.get(INSTANCE_FIELD)
+            content[INSTANCE_FIELD] = target
+            atomic_write(str(config_path), json.dumps(content, ensure_ascii=False, indent=2))
+
+        with self.protection.transaction() as (state, _):
+            predecessors = [k for k, v in state['instances'].items() if v.get('name') == instance]
+            state['instances'][target] = {
+                'name': instance, 'active': True, 'schedulerName': instance, 'legacy': False,
+                'predecessor': predecessors[-1] if predecessors else None,
+                'baseline': False, 'legacyStatsName': None,
+            }
+            if previous and previous != target and previous in state['instances']:
+                state['instances'][previous]['active'] = False
 
         # 切换后让服务重建缓存与监视，避免继续用旧身份上传。
         self.service.reload_identity(instance)
