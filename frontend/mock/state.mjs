@@ -159,6 +159,11 @@ export function createMockState({ empty = false } = {}) {
           { key: 'Branch', type: 'string', label: '分支', help: '模拟系统级分组，用于验证系统设置页。', value: 'dev', options: [] },
         ]
       },
+      {
+        key: 'Stock', label: '茗交所', fields: [
+          { key: 'StockUploadEnabled', type: 'bool', label: '行动力上传', help: '关闭后不再向茗交所上报行动力，已上报的历史保留；重新打开后会自动补足。', value: true, options: [] },
+        ]
+      },
     ], notice: '前端测试数据', demo: false, remote: {
       enabled: true, state: 'cloudflare_ready', address: 'https://remote.azurpilot.com/d/mock-device-id/', error: '',
     }
