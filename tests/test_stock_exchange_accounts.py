@@ -1,8 +1,10 @@
 """茗交所账号档案：导入校验、导出内容、切换计划与身份改写。"""
 import base64
 import json
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -138,6 +140,36 @@ class StockAccountTests(unittest.TestCase):
             payload.pop(field)
         result = self.import_payload(payload)
         self.assertEqual(result['instanceId'], INSTANCE)
+
+    def test_activate_drops_previous_action_point_chain_and_anchor(self):
+        """换身份后旧链必须撤掉：否则新身份用不同密钥校验会报「哈希链丢失」。"""
+        previous = self.protection.resolve('test')
+        database = self.root / 'config' / 'scheduler' / 'test.sqlite3'
+        database.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(str(database))) as db, db:
+            db.execute('CREATE TABLE observations (resource TEXT, total INTEGER, observed_at TEXT)')
+            db.execute('INSERT INTO observations VALUES(?,?,?)', ('ActionPoint', 1234, '2026-11-16 00:00:00'))
+            db.execute('CREATE TABLE action_point_chain (seq INTEGER PRIMARY KEY, observed_at TEXT NOT NULL,'
+                       ' total INTEGER NOT NULL, previous_hash TEXT NOT NULL, hash TEXT NOT NULL)')
+            db.execute('CREATE TABLE action_point_chain_owner (id INTEGER PRIMARY KEY, instance_id TEXT NOT NULL)')
+            db.execute('INSERT INTO action_point_chain_owner VALUES(1,?)', (previous,))
+        self.protection.anchor(previous + '/action-point-history', 'a' * 64, prepare=True)
+        self.assertTrue(self.protection.has_anchor(previous + '/action-point-history'))
+
+        account = self.import_payload(make_payload())
+        self.service.activate('test', account['accountId'], confirm=True)
+
+        with closing(sqlite3.connect(str(database))) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            left = db.execute('SELECT COUNT(*) FROM observations').fetchone()[0]
+        self.assertNotIn('action_point_chain', tables)
+        self.assertNotIn('action_point_chain_owner', tables)
+        self.assertIn('observations', tables, '普通调度数据不能被清掉')
+        self.assertEqual(left, 1)
+        self.assertFalse(self.protection.has_anchor(previous + '/action-point-history'),
+                         '链表撤销后 anchor 必须一起清')
+        backup = self.root / 'config' / 'backup' / ('stock-' + previous) / 'scheduler' / 'test.sqlite3'
+        self.assertTrue(backup.exists(), '旧库要先备份')
 
     # ------------------------------------------------------------------ 导出
     def test_export_contains_private_key_and_derived_fields(self):

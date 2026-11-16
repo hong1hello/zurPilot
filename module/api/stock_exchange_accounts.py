@@ -300,14 +300,18 @@ class StockAccountService:
             atomic_write(str(config_path), json.dumps(content, ensure_ascii=False, indent=2))
 
         with self.protection.transaction() as (state, _):
-            predecessors = [k for k, v in state['instances'].items() if v.get('name') == instance]
             state['instances'][target] = {
                 'name': instance, 'active': True, 'schedulerName': instance, 'legacy': False,
-                'predecessor': predecessors[-1] if predecessors else None,
+                # 旧身份是调度库里 action_point_chain_owner 的主人，迁移逻辑靠它认账。
+                'predecessor': previous if previous and previous != target else None,
                 'baseline': False, 'legacyStatsName': None,
             }
             if previous and previous != target and previous in state['instances']:
                 state['instances'][previous]['active'] = False
+
+        # 调度库里的行动力链属于旧身份，密钥与 owner 都不匹配新身份。
+        # 交给既有迁移逻辑处理：备份旧库、撤销三张链表与 anchor，普通调度数据保留。
+        self.protection.relocate_scheduler(instance, target)
 
         # 切换后让服务重建缓存与监视，避免继续用旧身份上传。
         self.service.reload_identity(instance)

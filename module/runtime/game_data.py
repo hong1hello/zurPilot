@@ -474,6 +474,10 @@ class GameDataProtector:
                         with closing(sqlite3.connect(target)) as db, db:
                             for table in ('action_point_history', 'action_point_chain', 'action_point_chain_owner'):
                                 db.execute(f'DROP TABLE IF EXISTS {table}')
+                        # 链表已撤销，旧身份的 anchor 必须一起清：否则新身份打开时
+                        # 看到"表不存在但 anchor 在"会判定哈希链丢失并停止同步。
+                        with self.transaction() as (data, _):
+                            data.setdefault('anchors', {}).pop(predecessor + '/action-point-history', None)
                 with self.transaction() as (data, _):
                     data['instances'][identity]['predecessor'] = None
             return
