@@ -155,7 +155,7 @@ class Cl1Database:
                 "hazard_level": self._coerce_int(hazard_level or 0) if source == "meow" else None,
             })
             if len(entries) > 5000:
-                entries = entries[-1000:]
+                entries = entries[-5000:]
             data["siren_research_device_entries"] = entries
 
             self._save_stats_in_connection(conn, instance, month, data)
@@ -422,9 +422,9 @@ class Cl1Database:
     def _list_stats_rows(self, instance: Optional[str] = None) -> List[Tuple[str, str]]:
         with self.store.transaction(write=False) as connection:
             if instance is None:
-                rows = connection.execute('SELECT instance,month FROM cl1_data ORDER BY instance,month')
+                rows = connection.execute('SELECT instance,month FROM cl1_months ORDER BY instance,month')
             else:
-                rows = connection.execute('SELECT instance,month FROM cl1_data WHERE instance=? ORDER BY month', (instance,))
+                rows = connection.execute('SELECT instance,month FROM cl1_months WHERE instance=? ORDER BY month', (instance,))
             return [(row[0], row[1]) for row in rows]
 
 
@@ -510,40 +510,22 @@ class Cl1Database:
 
 
     def increment_battle_count(self, instance: str, delta: int = 1):
-        """增加战斗次数。
-
-        标量走 SQL 内 JSON 原地自增：不读整月、不重写全部条目。
-        行不存在时退回一次完整写入，语义与旧实现一致。
-        """
+        """增加战斗次数"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            updated = conn.execute(
-                "UPDATE cl1_data SET data_json=json_set(data_json,'$.battle_count',"
-                "COALESCE(json_extract(data_json,'$.battle_count'),0)+?)"
-                " WHERE instance=? AND month=?", (delta, instance, month)).rowcount
-            if not updated:
-                data = self._empty_data(month)
-                data["battle_count"] = data.get("battle_count", 0) + delta
-                self._save_stats_in_connection(conn, instance, month, data)
+            data = self._get_stats_in_connection(conn, instance, month)
+            data["battle_count"] = data.get("battle_count", 0) + delta
+            self._save_stats_in_connection(conn, instance, month, data)
 
     def increment_akashi_encounter(self, instance: str, month: Optional[str] = None) -> int:
-        """增加明石奇遇次数并返回累计值（SQL 内自增，不重写整月）。"""
+        """增加明石奇遇次数，返回事务提交后的累计值。"""
         month = month or datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            updated = conn.execute(
-                "UPDATE cl1_data SET data_json=json_set(data_json,'$.akashi_encounters',"
-                "COALESCE(json_extract(data_json,'$.akashi_encounters'),0)+1)"
-                " WHERE instance=? AND month=?", (instance, month)).rowcount
-            if updated:
-                encounters = conn.execute(
-                    "SELECT json_extract(data_json,'$.akashi_encounters') FROM cl1_data"
-                    " WHERE instance=? AND month=?", (instance, month)).fetchone()[0]
-            else:
-                data = self._empty_data(month)
-                data["akashi_encounters"] = data.get("akashi_encounters", 0) + 1
-                self._save_stats_in_connection(conn, instance, month, data)
-                encounters = data["akashi_encounters"]
-        return int(encounters)
+            data = self._get_stats_in_connection(conn, instance, month)
+            data["akashi_encounters"] = data.get("akashi_encounters", 0) + 1
+            self._save_stats_in_connection(conn, instance, month, data)
+            encounters = data["akashi_encounters"]
+        return encounters
 
     def add_akashi_ap_entry(
         self, instance: str, amount: int, base: int, count: int, source: str
@@ -1448,7 +1430,7 @@ class Cl1Database:
         }
         entries = data.get("gem_commission_entries", [])
         entries.append(entry)
-        data["gem_commission_entries"] = entries[-1000:]
+        data["gem_commission_entries"] = entries[-5000:]
 
     def _settle_running_in_months(
         self, data, months, now, reward, name=None, duration_hour=None, create_time=None,
@@ -1509,7 +1491,7 @@ class Cl1Database:
             data = {month: self._get_stats_in_connection(conn, instance, month) for month in read_months}
             entries = data[months[0]].get("commission_income_entries", [])
             entries.append(entry)
-            data[months[0]]["commission_income_entries"] = entries[-1000:]
+            data[months[0]]["commission_income_entries"] = entries[-5000:]
             changed = {months[0]}
             if gem_duration is not None:
                 for commission in self._running_commissions_from_months(data, months):
@@ -1691,7 +1673,7 @@ class Cl1Database:
                 return None
             entries.append(entry)
             # 与委托收益保持一致：按月保留最近 5000 条
-            data["research_drop_entries"] = entries[-1000:]
+            data["research_drop_entries"] = entries[-5000:]
             self._save_stats_in_connection(conn, instance, month, data)
         return entry
 
