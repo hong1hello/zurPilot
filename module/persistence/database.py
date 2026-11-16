@@ -198,6 +198,17 @@ def for_legacy_path(path, kind):
     return database
 
 
+def close_all(config_directory=None):
+    """关闭业务总库的可复用连接；传入目录时只处理该目录。"""
+    with _guard:
+        databases = set(_databases.values())
+    if config_directory is not None:
+        target = os.path.normcase(str(Path(config_directory).resolve()))
+        databases = {item for item in databases if os.path.normcase(str(item.directory.resolve())) == target}
+    for database in databases:
+        database.close_all()
+
+
 def initialize(config_directory=None):
     """运行入口在创建业务 worker 前调用，失败必须中止启动。"""
     global _configured_directory

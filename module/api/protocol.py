@@ -192,6 +192,14 @@ class MindFileParams(InstanceParams):
     content: StrictStr = Field(min_length=1, max_length=8_000_000)
 
 
+class PluginStorageParams(Params):
+    id: StrictStr = Field(pattern=r'^[a-z0-9][a-z0-9._-]{0,79}$')
+    instance: StrictStr | None = Field(default=None, max_length=128)
+    key: StrictStr = Field(min_length=1, max_length=120)
+    action: Literal['get', 'set', 'delete']
+    value: Any = None
+
+
 class StockRegisterParams(InstanceParams):
     """只注册实例股票；交易账户由群内官方机器人注册。"""
     username: StrictStr = Field(min_length=2, max_length=32)
