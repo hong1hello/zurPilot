@@ -59,7 +59,7 @@ const styles = `
 `
 
 /** 工作台默认的主导航链接组，覆盖全局页面、实例内页面与插件页面入口。 */
-export function TopNavigation({instance, onNavigate, announcementUnread, updateAvailable}: NavigationProps) {
+export function TopNavigation({instance, onNavigate, updateAvailable}: NavigationProps) {
   const {ui} = useApp()
   const base = instance ? `/i/${encodeURIComponent(instance)}` : ''
   return <nav className="workbench-navigation" data-apu-component="navigation" aria-label={ui('nav.primary')}>
@@ -69,7 +69,6 @@ export function TopNavigation({instance, onNavigate, announcementUnread, updateA
       <NavLink to={`${base}/resources`} onClick={onNavigate}>{ui('nav.resources')}</NavLink>
       <NavLink to={`${base}/stock-exchange`} onClick={onNavigate}>{ui('stock.name')}</NavLink>
     </>}
-    <NavLink to="/announcement" onClick={onNavigate}>{ui('nav.announcement')}{announcementUnread && <span className="text-xs" aria-label={ui('nav.newBadge')}>●</span>}</NavLink>
     <NavLink to="/updater" onClick={onNavigate}>{ui('nav.updater')}{updateAvailable && <span className="text-xs">{ui('nav.newBadge')}</span>}</NavLink>
     <NavLink to="/interface" onClick={onNavigate}>{ui('nav.interface')}</NavLink>
     <NavLink to="/plugins" onClick={onNavigate}>{ui('nav.plugins')}</NavLink>
@@ -83,7 +82,7 @@ export function TopNavigation({instance, onNavigate, announcementUnread, updateA
 }
 
 /** 工作台壳层：工具栏、实例切换、导航区与内容区；页面滚动由内容区承接。 */
-export function WorkbenchShell({children, instance, pageTitle, onCreate, updateAvailable, announcementUnread}: ShellProps) {
+export function WorkbenchShell({children, instance, pageTitle, onCreate, updateAvailable}: ShellProps) {
   const {instances, ui} = useApp()
   const connection = useConnection()
   const location = useLocation()
@@ -117,8 +116,8 @@ export function WorkbenchShell({children, instance, pageTitle, onCreate, updateA
     </header>
     <div className="workbench-nav-region">
       <Suspense fallback={<TopNavigation instance={instance}/>}>
-        <Navigation instance={instance} updateAvailable={updateAvailable} announcementUnread={announcementUnread}
-          fallback={<TopNavigation instance={instance} updateAvailable={updateAvailable} announcementUnread={announcementUnread}/>}/>
+        <Navigation instance={instance} updateAvailable={updateAvailable}
+          fallback={<TopNavigation instance={instance} updateAvailable={updateAvailable}/>}/>
       </Suspense>
     </div>
     <main id="main-content" tabIndex={-1} className="workbench-content">{children}</main>

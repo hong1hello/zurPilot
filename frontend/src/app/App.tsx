@@ -52,7 +52,7 @@ import type { NavigationProps, ShellProps } from '../themes/definition'
 const PRIMARY_NAV_PATHS = ['/updater', '/interface', '/remote', '/configs', '/settings', '/plugins']
 const SETUP_PATH = '/setup'
 
-function ModernNavigation({instance, onNavigate, announcementUnread, updateAvailable}: NavigationProps) {
+function ModernNavigation({instance, onNavigate, updateAvailable}: NavigationProps) {
   const {ui} = useApp()
   const base = instance ? '/i/' + encodeURIComponent(instance) : ''
   return <nav className="primary-nav" data-apu-component="navigation" aria-label={ui('nav.primary')}>
@@ -243,7 +243,7 @@ export function App() {
   if (setup || (empty && !pluginManager && !globalPlugin)) return <main className="instance-setup">{setup && empty && schema ? <Suspense fallback={<Loading/>}><Outlet/></Suspense> : <Loading/>}</main>
   const content = !schema || location.pathname === '/' || (instance && (!instancesLoaded || !current))
     ? <Loading/> : <Suspense fallback={<Loading/>}><Outlet context={update} key={instance ?? 'global'}/></Suspense>
-  const props = {instance, pageTitle, onCreate: () => setCreating(true), updateAvailable, announcementUnread: false}
+  const props = {instance, pageTitle, onCreate: () => setCreating(true), updateAvailable}
   const ActiveShell = pluginManager ? ModernShell : Shell
   return <>
     {!pluginManager && <PluginStyles/>}
@@ -254,7 +254,7 @@ export function App() {
   </>
 }
 
-function ModernShell({children, instance, pageTitle, onCreate, updateAvailable, announcementUnread}: ShellProps) {
+function ModernShell({children, instance, pageTitle, onCreate, updateAvailable}: ShellProps) {
   const {instances, theme, notify, ui} = useApp()
   const connection = useConnection()
   const {pathname} = useLocation()
@@ -326,7 +326,7 @@ function ModernShell({children, instance, pageTitle, onCreate, updateAvailable, 
   const inspector = useSyncExternalStore(subscribeMaterialInspector, getMaterialInspector, getMaterialInspector)
   const hasDockedInspector = theme !== 'minimal' && inspector.open && inspector.docked && !inspector.minimized
   const PrimaryNavigation = pluginManager ? ModernNavigation : Navigation
-  const navigationProps = {instance, onNavigate: closeDrawer, updateAvailable, announcementUnread}
+  const navigationProps = {instance, onNavigate: closeDrawer, updateAvailable}
   return <div
     className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${currentTask ? 'task-config-shell' : ''} ${modernShell ? 'modern-shell' : ''} ${modernGlobalShell ? 'modern-global-shell' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
     data-apu-component={pluginManager ? undefined : 'shell'}

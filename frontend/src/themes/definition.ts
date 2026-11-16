@@ -13,7 +13,6 @@ export interface NavigationProps {
   /** 导航点击后的回调，用于移动端点击链接后收起抽屉。 */
   onNavigate?: () => void
   /** 是否显示公告未读徽标。 */
-  announcementUnread?: boolean
   /** 是否显示更新可用徽标。 */
   updateAvailable?: boolean
   /** 插件导航视图不可用时的内置回退内容。 */
