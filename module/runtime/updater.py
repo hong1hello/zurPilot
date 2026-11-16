@@ -51,6 +51,8 @@ class Updater(DeployConfig, RuntimeGitManager):
         self.event: threading.Event = None
         self._update_lock = threading.Lock()
         self.force_update = False
+        # 用户点了「本次不更新」：只影响本进程，下次启动重新检查。
+        self.force_update_skipped = False
         self._force_update_checking = False
 
     def alas_kill(self):
@@ -269,7 +271,7 @@ class Updater(DeployConfig, RuntimeGitManager):
         try:
             result = self._check_update()
             self.state = result
-            if result and self.force_update:
+            if result and self.force_update and not getattr(self, 'force_update_skipped', False):
                 logger.info("强制更新开关已开启，立即执行更新")
                 self.run_update()
         except Exception as e:
@@ -281,7 +283,7 @@ class Updater(DeployConfig, RuntimeGitManager):
         try:
             force_update = self._check_cloud_force_update()
             self.force_update = force_update is True
-            if self.force_update:
+            if self.force_update and not getattr(self, 'force_update_skipped', False):
                 logger.info("强制更新开关已开启，立即执行已检测到的更新")
                 self.run_update()
         except Exception as e:
@@ -571,6 +573,13 @@ class Updater(DeployConfig, RuntimeGitManager):
                 self.state = "failed"
             th._task.delay = get_next_time(self.schedule_time)
             yield
+
+    def skip_force_update(self):
+        """本次会话不再执行强制更新；已开始的更新会被取消，下次启动重新检查。"""
+        self.force_update_skipped = True
+        self.force_update = False
+        if getattr(self, 'state', None) in ('start', 'wait'):
+            self.cancel()
 
     def cancel(self):
         """取消当前正在等待的更新流程。"""

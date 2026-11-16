@@ -36,7 +36,7 @@ export function Updater() {
     }).catch(error => {if (active) setError(error.message)}).finally(() => {if (active) setLoading(false)})
     return () => {active = false}
   }, [connection, data?.managedByAndroid, local, upstream, offset, retry])
-  async function act(method: 'updater.fetch' | 'updater.apply' | 'updater.cancel') {
+  async function act(method: 'updater.fetch' | 'updater.apply' | 'updater.cancel' | 'updater.skip') {
     setBusy(true); setError('')
     try {await api.request(method, {}); refresh()}
     catch (error) {setError((error as Error).message)} finally {setBusy(false)}
@@ -49,7 +49,7 @@ export function Updater() {
   const disabled = busy || connection !== 'ready' || !data || data.busy
   const statusLabel = !local || !upstream ? ui('updater.noVersion') : data?.state === 'failed' ? ui('updater.state.failed') : data?.available && !data.busy ? ui('updater.state.available') : states[data?.state ?? ''] ? ui(states[data?.state ?? '']) : data?.state
   return <>
-    <PageTitle title={ui('nav.updater')} actions={data?.managedByAndroid ? undefined : <><button className="button" disabled={disabled} onClick={() => void act('updater.fetch')}><RefreshCw size={16} className={data?.state === 'fetch' || data?.state === 'checking' ? 'spin' : ''}/>{ui('updater.fetch')}</button><button className="button primary" disabled={disabled || !data?.canApply} onClick={requestUpdate}><Download size={16}/>{ui('updater.update')}</button>{data?.canCancel && <button className="button" disabled={busy || connection !== 'ready'} onClick={() => void act('updater.cancel')}><X size={16}/>{ui('updater.cancel')}</button>}</>}/>
+    <PageTitle title={ui('nav.updater')} actions={data?.managedByAndroid ? undefined : <><button className="button" disabled={disabled} onClick={() => void act('updater.fetch')}><RefreshCw size={16} className={data?.state === 'fetch' || data?.state === 'checking' ? 'spin' : ''}/>{ui('updater.fetch')}</button><button className="button primary" disabled={disabled || !data?.canApply} onClick={requestUpdate}><Download size={16}/>{ui('updater.update')}</button>{data?.canCancel && <button className="button" disabled={busy || connection !== 'ready'} onClick={() => void act('updater.cancel')}><X size={16}/>{ui('updater.cancel')}</button>}{data?.forceUpdate && <button className="button" disabled={busy || connection !== 'ready'} onClick={() => void act('updater.skip')}><X size={16}/>{ui('updater.skipForce')}</button>}</>}/>
     {(error || statusError || data?.error) && <ErrorBox message={error || statusError || data?.error || ''} retry={() => {refresh(); setRetry(value => value + 1)}}/>}
     {!data ? <Loading/> : <>
       {data.managedByAndroid && <section className="panel"><p>{ui('updater.androidManaged')}</p></section>}

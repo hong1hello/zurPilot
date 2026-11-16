@@ -134,6 +134,7 @@ class Router:
             'updater.fetch': Method(p.Params, lambda _: self.updates.start('fetch'), True),
             'updater.apply': Method(p.Params, lambda _: self.updates.start('apply'), True),
             'updater.cancel': Method(p.Params, lambda _: self.updates.cancel(), True),
+            'updater.skip': Method(p.Params, lambda _: self.updates.skip_force(), True),
             'background.access': Method(p.Params, lambda _: {'token': self.background_token}),
             'background.resolve': Method(p.BackgroundUrlParams, lambda x: background.resolve(x.url)),
             'background.gallery.list': Method(p.Params, lambda _: background.gallery_list()),

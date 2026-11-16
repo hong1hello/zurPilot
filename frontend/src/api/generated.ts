@@ -75,6 +75,7 @@ export interface Parameters {
   "updater.fetch": Record<string, never>
   "updater.apply": Record<string, never>
   "updater.cancel": Record<string, never>
+  "updater.skip": Record<string, never>
   "background.access": Record<string, never>
   "background.resolve": { url: string }
   "background.gallery.list": Record<string, never>

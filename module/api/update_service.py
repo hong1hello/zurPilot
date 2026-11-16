@@ -172,10 +172,17 @@ class UpdateService:
                 'localHead': local or None, 'upstreamHead': upstream or None,
                 'branch': self.updater.Branch, 'ahead': ahead, 'behind': behind,
                 'available': behind > 0 or state == 1, 'busy': busy, 'error': self.error,
+                'forceUpdate': bool(getattr(self.updater, 'force_update', False)
+                                    and not getattr(self.updater, 'force_update_skipped', False)),
                 'shaMismatch': mismatch,
                 'canApply': bool(local and upstream and behind and not busy
                                  and State.restart_event is not None and State.dependency_sync_event is not None),
                 'canCancel': state in ('start', 'wait'), 'managedByAndroid': False}
+
+    def skip_force(self) -> dict:
+        """本次会话跳过强制更新，返回最新状态。"""
+        self.updater.skip_force_update()
+        return self.status()
 
     def commits(self, offset: int = 0, limit: int = 50) -> dict:
         """分页获取本地与上游可达的提交历史记录。

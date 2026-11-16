@@ -17,6 +17,8 @@ export interface UpdateStatus {
   /** 本地与更新源历史互不包含（例如镜像重写历史导致 SHA 分离），更新前需弹窗确认。 */
   shaMismatch?: boolean
   managedByAndroid?: boolean
+  /** 云端要求强制更新且本次会话尚未跳过；前端据此显示「本次不更新」。 */
+  forceUpdate?: boolean
 }
 interface Commit { sha: string; author: string; date: string; message: string }
 export interface CommitHistory { entries: Commit[]; total: number; hasMore: boolean; localHead: string | null; upstreamHead: string | null }
@@ -211,6 +213,7 @@ export interface Results {
   'background.gallery.remove': {removed: boolean}
   'background.gallery.open': {path: string}
   'updater.status': UpdateStatus
+  'updater.skip': UpdateStatus
   'updater.commits': CommitHistory
   'updater.fetch': {accepted: boolean}
   'updater.apply': {accepted: boolean}
