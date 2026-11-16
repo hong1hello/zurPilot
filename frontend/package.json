@@ -40,6 +40,7 @@
     "lucide-react": "1.45.0",
     "marked": "^18.0.14",
     "motion": "^13.4.1",
+    "motion-dom": "^13.4.1",
     "qrcode-generator": "2.0.4",
     "radix-ui": "^1.8.1",
     "react": "19.3.0",
