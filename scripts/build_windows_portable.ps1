@@ -94,8 +94,26 @@ if (-not $SkipRuntime) {
 
     $SiteSrc = Join-Path $Repo ".venv\Lib\site-packages"
     if (-not (Test-Path -LiteralPath $SiteSrc)) { throw "缺少 .venv\Lib\site-packages，先跑 uv sync" }
-    Write-Host "    site-packages -> runtime\Lib\site-packages（约 1GB，几分钟）"
-    Copy-Tree $SiteSrc (Join-Path $Runtime "Lib\site-packages")
+
+    # 1GB 的小文件用 robocopy 要跑十几分钟；tar 一次归档再解压，30 秒到 2 分钟
+    $SiteDst = Join-Path $Runtime "Lib\site-packages"
+    if ([System.IO.Directory]::Exists($SiteDst)) { [System.IO.Directory]::Delete($SiteDst, $true) }
+    $TarPath = Join-Path $OutDir "site-packages.tar"
+    Write-Host "    归档 site-packages（约 1GB）..."
+    Push-Location (Join-Path $Repo ".venv\Lib")
+    try {
+        & tar.exe -cf $TarPath "site-packages"
+        if ($LASTEXITCODE -ne 0) { throw "tar 归档失败 ($LASTEXITCODE)" }
+        Write-Host "    解压到 runtime..."
+        & tar.exe -xf $TarPath -C (Join-Path $Runtime "Lib")
+        if ($LASTEXITCODE -ne 0) { throw "tar 解压失败 ($LASTEXITCODE)" }
+    }
+    finally {
+        Pop-Location
+        if (Test-Path -LiteralPath $TarPath) { Remove-Item -LiteralPath $TarPath -Force }
+    }
+    $Count = @(Get-ChildItem -LiteralPath $SiteDst -Directory -ErrorAction SilentlyContinue).Count
+    Write-Host "    site-packages 包数: $Count"
 
     # pywin32 的 .pth 会 import pywin32_bootstrap；部分包不带这个模块，留着会在每次启动时刷错误
     $Pth = Join-Path $Runtime "Lib\site-packages\pywin32.pth"
