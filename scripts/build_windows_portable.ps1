@@ -14,7 +14,7 @@
         └─ gui.py alas.py ...
 
 .PARAMETER OutDir
-    输出目录，默认 <repo>\build-win\out
+    输出目录，默认 <repo 的上一级>\build-win\out（放仓库外，避免 1GB 产物被 git 扫到）
 
 .PARAMETER SkipRuntime
     跳过运行时组装（runtime 已经就位时用，省 10 分钟）
@@ -40,7 +40,8 @@ $ErrorActionPreference = "Stop"
 
 # 仓库根 = 本脚本的上一级
 $Repo = Split-Path -Parent $PSScriptRoot
-if (-not $OutDir) { $OutDir = Join-Path $Repo "build-win\out" }
+# 输出放仓库外一层，避免 1GB 产物被 git / ruff / 打包脚本自己扫到
+if (-not $OutDir) { $OutDir = Join-Path (Split-Path -Parent $Repo) "build-win\out" }
 $Stage = Join-Path $OutDir "AzurPilot-Windows-x64"
 
 function Write-Step([string]$Text) {
