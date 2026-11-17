@@ -88,7 +88,7 @@ export interface Parameters {
   "background.gallery.open": Record<string, never>
   "auth.login": { password?: string }
   "auth.launcher": { ticket: string }
-  "events.subscribe": { instance?: string | null; topics: Array<"instances" | "overview" | "logs" | "preview" | "stock" | "notifications" | "launcher"> }
+  "events.subscribe": { instance?: string | null; topics: Array<"instances" | "overview" | "logs" | "preview" | "stock" | "notifications" | "launcher" | "plugins"> }
 }
 export const webSocketTransport = {"frameBytes": 65536, "requestBytes": 8388608, "responseBytes": 67108864, "dataTopics": ["logs", "preview"]} as const
 export const dataMethods = ["schema.get", "config.get", "config.export", "dock.report", "mind.catalog", "fleetTech.catalog", "fleetTech.report", "mind.plan", "mind.import", "mind.recognize", "scheduler.program.catalog", "scheduler.program.get", "scheduler.program.validate", "scheduler.program.simulate", "logs.get", "opsi.simulator.status", "opsi.simulator.figure", "preview.capture", "statistics.report", "statistics.resourceFlows", "meowfficer.scoreReport", "statistics.resources"] as const

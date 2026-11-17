@@ -1,0 +1,183 @@
+/**
+ * lucide-react 1.45.0 的 typings 指向 dist/lucide-react.d.ts，但包内缺这个文件，
+ * TS 因此退回 CJS 入口并对每个 import 报 TS7016。
+ *
+ * 这里按项目实际使用到的图标生成声明；图标名写错仍会在编译期报错。
+ * 新增图标时把名字补进列表，或直接重跑本脚本。
+ */
+declare module 'lucide-react' {
+  import type { ComponentType, SVGProps } from 'react'
+
+  export type LucideProps = SVGProps<SVGSVGElement> & {
+    size?: number | string
+    strokeWidth?: number | string
+    absoluteStrokeWidth?: boolean
+  }
+  // 图标常被收窄成调用方自定义的 props 形状（如 StatusIconType），
+  // 用 ComponentType<any> 才能双向赋值，否则每个收窄点都报不兼容。
+  export type LucideIcon = ComponentType<any>
+
+  export const Activity: LucideIcon
+  export const AlarmClock: LucideIcon
+  export const AlertCircle: LucideIcon
+  export const AlertTriangle: LucideIcon
+  export const Anchor: LucideIcon
+  export const AppWindow: LucideIcon
+  export const ArrowDown: LucideIcon
+  export const ArrowDownToDot: LucideIcon
+  export const ArrowDownUp: LucideIcon
+  export const ArrowLeft: LucideIcon
+  export const ArrowRight: LucideIcon
+  export const ArrowRightFromLine: LucideIcon
+  export const ArrowRightToLine: LucideIcon
+  export const ArrowUp: LucideIcon
+  export const ArrowUpDown: LucideIcon
+  export const ArrowUpWideNarrow: LucideIcon
+  export const Award: LucideIcon
+  export const Ban: LucideIcon
+  export const Binary: LucideIcon
+  export const BookOpen: LucideIcon
+  export const BookmarkPlus: LucideIcon
+  export const Box: LucideIcon
+  export const Braces: LucideIcon
+  export const Bug: LucideIcon
+  export const Calculator: LucideIcon
+  export const Calendar: LucideIcon
+  export const CalendarClock: LucideIcon
+  export const CalendarDays: LucideIcon
+  export const CalendarRange: LucideIcon
+  export const Cat: LucideIcon
+  export const ChartNoAxesCombined: LucideIcon
+  export const Check: LucideIcon
+  export const CheckCircle2: LucideIcon
+  export const CheckIcon: LucideIcon
+  export const CheckSquare: LucideIcon
+  export const ChevronDown: LucideIcon
+  export const ChevronDownIcon: LucideIcon
+  export const ChevronRight: LucideIcon
+  export const ChevronUpIcon: LucideIcon
+  export const CircleAlert: LucideIcon
+  export const CirclePause: LucideIcon
+  export const CirclePlay: LucideIcon
+  export const CircleSlash: LucideIcon
+  export const CircleStop: LucideIcon
+  export const ClipboardCheck: LucideIcon
+  export const Clock: LucideIcon
+  export const Clock3: LucideIcon
+  export const Coins: LucideIcon
+  export const Compass: LucideIcon
+  export const Copy: LucideIcon
+  export const CornerDownLeft: LucideIcon
+  export const Cpu: LucideIcon
+  export const Crosshair: LucideIcon
+  export const Crown: LucideIcon
+  export const Dock: LucideIcon
+  export const Download: LucideIcon
+  export const ExternalLink: LucideIcon
+  export const Eye: LucideIcon
+  export const EyeOff: LucideIcon
+  export const FileJson: LucideIcon
+  export const FileText: LucideIcon
+  export const FileUp: LucideIcon
+  export const Filter: LucideIcon
+  export const Flame: LucideIcon
+  export const FlaskConical: LucideIcon
+  export const FolderOpen: LucideIcon
+  export const Frame: LucideIcon
+  export const Fuel: LucideIcon
+  export const Gauge: LucideIcon
+  export const Gem: LucideIcon
+  export const Gift: LucideIcon
+  export const GitBranch: LucideIcon
+  export const GitCommitHorizontal: LucideIcon
+  export const Globe: LucideIcon
+  export const GripVertical: LucideIcon
+  export const Hash: LucideIcon
+  export const HelpCircle: LucideIcon
+  export const History: LucideIcon
+  export const Home: LucideIcon
+  export const Hourglass: LucideIcon
+  export const Image: LucideIcon
+  export const ImageIcon: LucideIcon
+  export const Languages: LucideIcon
+  export const Layers: LucideIcon
+  export const LayoutDashboard: LucideIcon
+  export const LayoutGrid: LucideIcon
+  export const ListFilter: LucideIcon
+  export const ListPlus: LucideIcon
+  export const ListTodo: LucideIcon
+  export const ListTree: LucideIcon
+  export const Loader2Icon: LucideIcon
+  export const LoaderCircle: LucideIcon
+  export const LocateFixed: LucideIcon
+  export const LucideIcon: LucideIcon
+  export const Map: LucideIcon
+  export const MapIcon: LucideIcon
+  export const Menu: LucideIcon
+  export const MenuIcon: LucideIcon
+  export const Minimize2: LucideIcon
+  export const MonitorSmartphone: LucideIcon
+  export const MoreVertical: LucideIcon
+  export const Package: LucideIcon
+  export const Paintbrush: LucideIcon
+  export const Palette: LucideIcon
+  export const Palmtree: LucideIcon
+  export const PanelLeft: LucideIcon
+  export const PanelRight: LucideIcon
+  export const PanelRightClose: LucideIcon
+  export const PanelRightOpen: LucideIcon
+  export const Pause: LucideIcon
+  export const PawPrint: LucideIcon
+  export const PenTool: LucideIcon
+  export const Percent: LucideIcon
+  export const Play: LucideIcon
+  export const Plus: LucideIcon
+  export const Puzzle: LucideIcon
+  export const QrCode: LucideIcon
+  export const Radar: LucideIcon
+  export const Radio: LucideIcon
+  export const Redo2: LucideIcon
+  export const RefreshCw: LucideIcon
+  export const Repeat: LucideIcon
+  export const Repeat1: LucideIcon
+  export const RotateCcw: LucideIcon
+  export const RotateCw: LucideIcon
+  export const Save: LucideIcon
+  export const Scale: LucideIcon
+  export const Search: LucideIcon
+  export const Settings: LucideIcon
+  export const Settings2: LucideIcon
+  export const Shield: LucideIcon
+  export const ShieldCheck: LucideIcon
+  export const Ship: LucideIcon
+  export const ShoppingCart: LucideIcon
+  export const Shuffle: LucideIcon
+  export const Skull: LucideIcon
+  export const Sliders: LucideIcon
+  export const SlidersHorizontal: LucideIcon
+  export const Smartphone: LucideIcon
+  export const Snowflake: LucideIcon
+  export const Sparkles: LucideIcon
+  export const Square: LucideIcon
+  export const StepForward: LucideIcon
+  export const Sunrise: LucideIcon
+  export const Sword: LucideIcon
+  export const Swords: LucideIcon
+  export const Table: LucideIcon
+  export const TableIcon: LucideIcon
+  export const Terminal: LucideIcon
+  export const Timer: LucideIcon
+  export const ToggleLeft: LucideIcon
+  export const Trash2: LucideIcon
+  export const TrendingUp: LucideIcon
+  export const TriangleAlert: LucideIcon
+  export const Undo2: LucideIcon
+  export const Upload: LucideIcon
+  export const Variable: LucideIcon
+  export const WifiOff: LucideIcon
+  export const Workflow: LucideIcon
+  export const Wrench: LucideIcon
+  export const X: LucideIcon
+  export const XIcon: LucideIcon
+  export const Zap: LucideIcon
+}

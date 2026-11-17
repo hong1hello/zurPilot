@@ -119,7 +119,8 @@ export function Editor() {
   function deleteSelected() {
     if (!graph) return
     const ids = new Set(selection.filter(n => n !== graph.entry))
-    const selectedEdges = new Set(flow.getEdges().filter(e => e.selected).map(e => e.id))
+    // flow 的类型来自外部实例，getEdges() 返回 any；这里显式标注，避免 noImplicitAny 报错
+    const selectedEdges = new Set(flow.getEdges().filter((e: {selected?: boolean}) => e.selected).map((e: {id: string}) => e.id))
     if (!ids.size && !selectedEdges.size) return
     updateGraph({...graph, nodes: graph.nodes.filter(n => !ids.has(n.id)), edges: graph.edges.filter(e => !ids.has(e.source) && !ids.has(e.target) && !selectedEdges.has(e.id))})
     setSelection([])

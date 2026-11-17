@@ -250,6 +250,12 @@ export interface Results {
   'settings.patch': {updated: string[]}
   'startup.get': {enabled: boolean; remember: boolean}
   'startup.set': {enabled: boolean; remember: boolean}
+  // 插件运行时接口：#1505 新增，前端 PluginFrame / plugins/context 已经在调。
+  // InstalledPlugin 用 import() 类型引用，避免 api/types ←→ plugins/types 的循环依赖。
+  'plugins.access': {token: string}
+  'plugins.list': import('../plugins/types').InstalledPlugin[]
+  'plugins.storage.get': {value: unknown}
+  'plugins.storage.write': {value: unknown}
 }
 
 export interface ResourceFlowEntry {

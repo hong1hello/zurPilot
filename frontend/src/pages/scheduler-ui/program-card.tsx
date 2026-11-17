@@ -21,7 +21,8 @@ export const Card = memo(function Card({data, selected}: NodeProps<CanvasNode>) 
   const connectingType = connectingPort && connection.fromNode?.data.outputTypes[connectingPort]
   // 连线进行中：any 输入端口实时显示来源类型配色，提示当前连接是否兼容。
   const handleStyle = (declared: PortType, actual: PortType, input: boolean) => {
-    const type = declared === 'any' && input && connectingType ? connectingType : actual
+    // connectingType 来自 ReactFlow 的 any 数据，先收敛成 PortType 再当索引，否则 noImplicitAny 报 TS7053
+    const type: PortType = declared === 'any' && input && connectingType ? (connectingType as PortType) : actual
     return {background:type === 'any' ? wildcardBackground : portColors[type]}
   }
   return <div style={{'--card-color':categoryColor(spec.category)} as CSSProperties} className={`program-card ${spec.pure ? 'data' : 'action'} ${selected ? 'selected' : ''} ${data.current ? 'current' : ''} ${data.invalid ? 'invalid' : ''}`}>

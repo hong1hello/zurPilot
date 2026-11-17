@@ -3,7 +3,7 @@
  */
 
 import { useMemo, type ReactNode } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, type Variants } from 'motion/react'
 import { motionReducedActive } from '../app/motionPrefs'
 
 interface SidebarTransitionProps {
@@ -57,7 +57,7 @@ export function SidebarTransition({ viewKey, children }: SidebarTransitionProps)
           initial="initial"
           animate="animate"
           exit="exit"
-          variants={variants}
+          variants={variants as Variants}
           transition={transition}
           style={{ willChange: 'opacity, transform' }}
         >
