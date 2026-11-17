@@ -6,7 +6,8 @@
 .commit-panel .panel-heading {flex-wrap: wrap; gap: 12px}
 /* 更新器页头：状态摘要锚定左侧、操作按钮收进居中内容列右侧，不再孤悬屏幕角落 */
 .updater-head {display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px}
-.updater-head > :last-child {margin-left: auto}
+/* 按钮组不能被压缩：flex 子项默认 shrink=1，会把「更新」按钮挤到放不下文字（文字溢出被裁） */
+.updater-head > :last-child {margin-left: auto; flex-shrink: 0; max-width: 100%}
 /* 页头按钮直接悬在壁纸上：面取实底 surface + 描边，玻璃材质的半透明控件面在壁纸上会糊边 */
 .updater-head .button.secondary {background: var(--surface); border: 1px solid var(--border)}
 .updater-head-summary {display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted)}

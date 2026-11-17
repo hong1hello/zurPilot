@@ -89,6 +89,10 @@ button:focus-visible, a:focus-visible, summary:focus-visible {outline-color: var
 .button.secondary {background: var(--theme-control-bg); color: var(--theme-text); border-color: var(--theme-border)}
 .button.secondary:hover {border-color: var(--theme-accent); color: var(--theme-accent)}
 .button.danger {background: var(--theme-danger); color: var(--theme-on-accent)}
+/* 禁用态：primary 的 color 是 on-accent（亮色），背景一旦褪成浅色就会白字白底看不见，
+   所以这里同时把前景换成 muted，并撤销全局的 opacity 淡化，保证文字始终可读。 */
+.button.primary:disabled,
+.button.danger:disabled {background: var(--theme-surface-muted); color: var(--theme-muted); opacity: 1; border-color: var(--theme-border)}
 .button.danger.subtle {background: var(--theme-danger-soft); color: var(--theme-danger); border-color: color-mix(in srgb, var(--theme-danger) 18%, transparent)}
 .icon-button {color: var(--theme-muted)}
 .icon-button:hover {background: var(--theme-surface-muted); color: var(--theme-accent)}
