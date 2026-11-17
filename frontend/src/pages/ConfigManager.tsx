@@ -10,6 +10,9 @@ import { useApp, useConnection } from '../app/context'
 import { CreateInstance } from '../app/App'
 import { taskLabel } from '../components/taskNavItems'
 import { ActionGroup, Empty, ErrorBox, Loading, StatusBadge } from '../components/ui'
+// 这页的私有样式从 topbar.css 拆到了独立文件，但没人 @import 它（上游也漏了），
+// 不在这里引入的话卡片内边距、meta 间距、按钮图标尺寸全部失效。
+import '../styles/config-manager.css'
 
 /** 把配置写成 json 文件下载。内容即配置本体（含 Alas 段），与导入接口期望的格式一致。 */
 function downloadJson(filename: string, data: unknown) {
