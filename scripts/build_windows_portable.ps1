@@ -165,7 +165,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $Stage "runtime\python.exe"))) {
 # git。用户机器上不保证装过 Git for Windows，所以把 MinGit 打进包里：
 #   runtime\git\cmd\git.exe            ← _git_executable() 找的就是这个位置
 # 挑 PortableGit 的安装目录：有 cmd\git.exe 就说明是完整发行版。
-if (-not $SkipRuntime) {
+# 不放在 -SkipRuntime 里：runtime 复用旧目录时，git 可能还没打过，这里补上。
+if (-not (Test-Path -LiteralPath (Join-Path $Stage "runtime\git\cmd\git.exe"))) {
     Write-Step "打包 Git"
     $GitCandidates = @()
     $where = Get-Command git.exe -ErrorAction SilentlyContinue
