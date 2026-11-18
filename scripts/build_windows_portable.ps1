@@ -160,6 +160,53 @@ if (-not (Test-Path -LiteralPath (Join-Path $Stage "runtime\python.exe"))) {
     throw "runtime\python.exe 不存在；先不带 -SkipRuntime 跑一次。"
 }
 
+# ── 1b. Git ─────────────────────────────────────────────────────────────────
+# 事务更新（deploy\independent.py）全靠 git fetch 拉增量，而 Python 运行时自带不了
+# git。用户机器上不保证装过 Git for Windows，所以把 MinGit 打进包里：
+#   runtime\git\cmd\git.exe            ← _git_executable() 找的就是这个位置
+# 挑 PortableGit 的安装目录：有 cmd\git.exe 就说明是完整发行版。
+if (-not $SkipRuntime) {
+    Write-Step "打包 Git"
+    $GitCandidates = @()
+    $where = Get-Command git.exe -ErrorAction SilentlyContinue
+    if ($where) {
+        # mingw64\bin\git.exe → 发行版根目录
+        $root = Split-Path -Parent (Split-Path -Parent $where.Source)
+        if (Test-Path -LiteralPath (Join-Path $root "cmd\git.exe")) { $GitCandidates += $root }
+    }
+    foreach ($probe in @(
+        "C:\Program Files\Git", "C:\Program Files (x86)\Git",
+        (Join-Path $env:LOCALAPPDATA "Programs\Git")
+    )) {
+        if (Test-Path -LiteralPath (Join-Path $probe "cmd\git.exe")) { $GitCandidates += $probe }
+    }
+
+    $GitDst = Join-Path $Stage "runtime\git"
+    if ($GitCandidates.Count) {
+        $GitRoot = $GitCandidates[0]
+        Write-Host "    git: $GitRoot"
+        if (Test-Path -LiteralPath $GitDst) { [System.IO.Directory]::Delete($GitDst, $true) }
+        # 只要运行期必需的部分：cmd 包装器、mingw64（git.exe + DLL）、
+        # usr（diff/less 等辅助）；doc 与 etc 的示例配置不要。
+        foreach ($part in @("cmd", "mingw64", "usr")) {
+            $src = Join-Path $GitRoot $part
+            if (Test-Path -LiteralPath $src) {
+                Copy-Tree -From $src -To (Join-Path $GitDst $part) -ExcludeDirs @(
+                    (Join-Path $src "share\doc"), (Join-Path $src "share\man"), (Join-Path $src "share\locale")
+                )
+            }
+        }
+        $gitExe = Join-Path $GitDst "cmd\git.exe"
+        if (-not (Test-Path -LiteralPath $gitExe)) { throw "Git 打包后找不到 cmd\git.exe" }
+        $GitSize = [math]::Round(((Get-ChildItem -LiteralPath $GitDst -Recurse -File |
+            Measure-Object -Property Length -Sum).Sum) / 1MB, 1)
+        Write-Host "    runtime\git ${GitSize}MB"
+    }
+    else {
+        Write-Host "    ! 找不到 Git 安装目录，事务更新将在没有系统 git 的机器上报错" -ForegroundColor Yellow
+    }
+}
+
 # ── 2. 源码 ─────────────────────────────────────────────────────────────────
 Write-Step "复制源码"
 $ExcludeDirs = @(
@@ -252,7 +299,9 @@ if (-not $NoProbe) {
         $LogFile = Join-Path $Stage "log\probe-stdout.log"
         $Detail = ""
         if (Test-Path -LiteralPath $LogFile) {
-            $Detail = (Get-Content -LiteralPath $LogFile -Tail 40 -ErrorAction SilentlyContinue) -join "`r`n"
+            # 子进程写的是 UTF-8，PowerShell 5.1 默认按 ANSI 读，中文会变乱码。
+            # 显式指定编码，否则失败时给的日志根本看不懂。
+            $Detail = (Get-Content -LiteralPath $LogFile -Tail 40 -Encoding UTF8 -ErrorAction SilentlyContinue) -join "`r`n"
         }
         $MarkerText = "启动探活失败（退出码 $LASTEXITCODE）`r`n时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`r`n`r`n--- log\probe-stdout.log 末尾 ---`r`n$Detail`r`n"
         Set-Content -LiteralPath $Marker -Value $MarkerText -Encoding UTF8

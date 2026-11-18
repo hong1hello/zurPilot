@@ -105,8 +105,9 @@ def probe(root, timeout=40.0):
     if not python.is_file():
         print(f'[probe] 找不到解释器: {python}', file=sys.stderr)
         return 1
-    if not (root / 'gui.py').is_file():
-        print(f'[probe] 找不到 gui.py: {root}', file=sys.stderr)
+    if not (root / 'module' / 'api' / 'app.py').is_file():
+        # 探活直接 import create_app，这个文件不在就说明包结构不对
+        print(f'[probe] 找不到 module/api/app.py: {root}', file=sys.stderr)
         return 1
     if not (root / 'frontend' / 'dist' / 'index.html').is_file():
         print('[probe] 找不到 frontend/dist/index.html，前端没构建', file=sys.stderr)
@@ -115,14 +116,24 @@ def probe(root, timeout=40.0):
     port = free_port()
     log_path = root / 'log' / 'probe-stdout.log'
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    # 无密码 + 只听本机，探活不该把用户的密码带进子进程命令行。
-    command = [
-        str(python), '-B', 'gui.py',
-        '--host', '127.0.0.1',
-        '--port', str(port),
-        '--key', '',
-    ]
-    print(f'[probe] 启动: {" ".join(command)}')
+    # 直接起 ASGI 应用，不走 gui.py。
+    #
+    # gui.py 启动前会检查前端资源并「必要时 npm install + vite build」，
+    # 一次要十几秒到几分钟，探活的超时窗口根本等不到服务起来——第一版就是
+    # 在这里误判成"候选版起不来"。而且探活想验证的是「应用能起来 + dist 能挂上」，
+    # 这两件事跟 gui.py 的启动前置无关。
+    #
+    # manage_runtime=False 关掉调度器与 RPC 生命周期：探活不该真的去连模拟器。
+    # mount_mcp=False 省掉 MCP 端点，让它更快就绪。
+    # 密码传空 + 只听 127.0.0.1，避免把用户密码带进命令行。
+    launcher = (
+        'import uvicorn; '
+        'from module.api.app import create_app; '
+        f"uvicorn.run(create_app(password='', manage_runtime=False, mount_mcp=False), "
+        f"host='127.0.0.1', port={port})"
+    )
+    command = [str(python), '-B', '-c', launcher]
+    print(f'[probe] 启动: {python} -B -c "<uvicorn create_app port={port}>"')
     handle = open(log_path, 'w', encoding='utf-8', errors='replace')
     try:
         child = subprocess.Popen(
