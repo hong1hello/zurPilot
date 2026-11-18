@@ -214,9 +214,17 @@ $ExcludeDirs = @(
     (Join-Path $Repo ".venv"), (Join-Path $Repo ".git"), (Join-Path $Repo "build-win"),
     (Join-Path $Repo "node_modules"), (Join-Path $Repo "frontend\node_modules"),
     (Join-Path $Repo ".ruff_cache"), (Join-Path $Repo ".uv-cache"), (Join-Path $Repo "log"),
-    (Join-Path $Repo "cache"), (Join-Path $Repo "screenshots"), (Join-Path $Repo "config\storage-backups")
+    (Join-Path $Repo "cache"), (Join-Path $Repo "screenshots"), (Join-Path $Repo "config\storage-backups"),
+    # 测试、文档、开发工具不随包分发：用户端用不到，还会让签名清单
+    # 随开发机状态变化（tests 目录有几百个文件）
+    (Join-Path $Repo "tests"), (Join-Path $Repo "docs"), (Join-Path $Repo "dev_tools"),
+    (Join-Path $Repo ".github"), (Join-Path $Repo ".pytest_cache"),
+    (Join-Path $Repo ".azurpilot"), (Join-Path $Repo "AzurPilot_Data_Backup")
 )
-Copy-Tree $Repo $Stage -ExcludeDirs $ExcludeDirs
+Copy-Tree -From $Repo -To $Stage -ExcludeDirs $ExcludeDirs -ExcludeFiles @(
+    ".dockerignore", ".gitattributes", ".gitignore", ".gitmodules",
+    "AGENTS.md", "CLAUDE.md", "Makefile", "docker-compose.yml", "Dockerfile"
+)
 
 # 前端已构建产物单独确认（build 产物被上面整体带走，这里只做存在性检查）
 $Dist = Join-Path $Stage "frontend\dist\index.html"

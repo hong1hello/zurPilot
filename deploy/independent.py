@@ -49,7 +49,9 @@ from urllib.parse import urlsplit
 ENV_FLAG = 'AZURPILOT_INDEPENDENT'
 
 # 应用文件白名单。只有这些会被更新替换，其余（runtime/log/cache）一律不碰。
-APP_DIRS = ('assets', 'bin', 'campaign', 'deploy', 'module', 'submodule', 'licenses')
+# scripts 也在内：release_manifest_cli.py 是用户端自己验签的入口，
+# 它必须能跟代码一起更新，也必须被签名保护——否则被改了也校验不出来。
+APP_DIRS = ('assets', 'bin', 'campaign', 'deploy', 'module', 'scripts', 'submodule', 'licenses')
 APP_FILES = (
     'alas.py', 'gui.py', 'mcp_server_sse.py', 'tui.py',
     'pyproject.toml', 'uv.lock', 'LICENSE',

@@ -42,11 +42,65 @@ SIGNATURE_NAME = 'release.sig'
 EXCLUDE_DIRS = frozenset({
     'runtime', 'log', 'cache', 'screenshots', 'node_modules', '.git',
     '__pycache__', '.ruff_cache', '.uv-cache', 'config',
+    # 虚拟环境：在仓库根直接签名时会撞上，2 万多个文件，必须排除
+    '.venv', 'venv', 'env', '.tox', 'dist', 'build-win',
+    # 以下既不进发布包、也不该参与签名，否则清单会随着开发机的本地状态变化：
+    'tests', 'docs', 'dev_tools', '.github', '.pytest_cache',
+    # 事务更新的工作目录（缓存裸仓库、ready-* 候选版、journal）
+    '.azurpilot',
+    # 回滚留下的崩溃现场：它是用户本地的运行痕迹，不同机器内容不同
+    'config-after-failed-update',
+    # 历史数据备份目录
+    'AzurPilot_Data_Backup',
 })
 EXCLUDE_NAMES = frozenset({
     MANIFEST_NAME, SIGNATURE_NAME, 'probe-summary.json',
     'README.txt', 'AzurPilot.bat', 'PROBE-FAILED.txt',
+    # 仓库元文件：不随包分发，也不该进签名
+    '.gitignore', '.gitattributes', '.gitmodules', '.dockerignore',
+    'AGENTS.md', 'CLAUDE.md', 'Makefile', 'Dockerfile', 'docker-compose.yml',
 })
+
+# 参与签名的顶层目录与根文件。
+#
+# 这份名单必须与 deploy/independent.py 的 APP_DIRS / APP_FILES 完全一致，
+# 因为两边分别决定「签名范围」与「可更新范围」。错位会导致：
+# - 签名多出来的文件：被篡改也校验不出来（更新不会碰它，也没人比对）
+# - 更新多出来的文件：清单里没有它，apply 的哈希比对会把它当"本机修改"而中止
+# tests/test_manifest_scope.py 里有断言强制两者相等。
+#
+# 光靠 EXCLUDE_DIRS 的目录黑名单做不到这件事：frontend/ 下只有 dist/ 该签，
+# src/ 与 e2e/ 不该签，黑名单无法表达"某目录下只收一个子目录"。
+SIGNABLE_DIRS = ('assets', 'bin', 'campaign', 'deploy', 'module', 'scripts', 'submodule', 'licenses')
+SIGNABLE_ROOT_FILES = (
+    'alas.py', 'gui.py', 'mcp_server_sse.py', 'tui.py',
+    'pyproject.toml', 'uv.lock', 'LICENSE',
+)
+
+
+def is_signable(name):
+    """判断一个相对路径是否参与签名。
+
+    与 `deploy.independent.app_path()` 同语义，但不 import 那边的模块——
+    签名工具要在打包机上独立可用，不该被 deploy.utils / uv 之类的依赖拖住。
+
+    Args:
+        name (str): POSIX 相对路径。
+
+    Returns:
+        bool: 参与签名返回 True。
+    """
+    parts = name.split('/')
+    if len(parts) == 1:
+        return name in SIGNABLE_ROOT_FILES
+    head = parts[0]
+    if head == 'frontend':
+        # 只要构建产物，源码与 e2e 用例不进包
+        return len(parts) > 2 and parts[1] == 'dist'
+    if head == 'config':
+        # 用户配置不签名；模板由代码生成，也不需要靠清单守护
+        return False
+    return head in SIGNABLE_DIRS
 
 _HEX40 = re.compile(r'[0-9a-f]{40}')
 _HEX64 = re.compile(r'[0-9a-f]{64}')
@@ -131,6 +185,7 @@ def iter_files(root):
     collected = []
     for current, dirs, names in os.walk(root):
         # 原地过滤，walk 就不会进这些目录，省掉大量 stat。
+        # 真正的判定在下面的 is_signable()，这里只是剪枝加速。
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
         for name in names:
             if name in EXCLUDE_NAMES:
@@ -138,6 +193,8 @@ def iter_files(root):
             path = Path(current) / name
             if path.is_symlink():
                 # 符号链接的内容取决于链接目标，同一份包在不同机器上会算出不同哈希。
+                continue
+            if not is_signable(path.relative_to(root).as_posix()):
                 continue
             collected.append(path)
     collected.sort(key=lambda p: p.relative_to(root).as_posix())
