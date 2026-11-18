@@ -119,3 +119,31 @@ def test_runtime_never_signed_never_updated():
     assert 'runtime' in manifest.EXCLUDE_DIRS
     assert ind.app_path('runtime/python.exe') is False
     assert ind.app_path('runtime/git/cmd/git.exe') is False
+
+
+def test_frontend_dist_is_signable():
+    """前端产物必须被签名。
+
+    踩过一次：EXCLUDE_DIRS 里加了 'dist' 想排除 Python 构建残留，
+    结果按目录名匹配把 frontend/dist 一起剪掉了，前端被篡改就校验不出来。
+    目录名有歧义时只能交给 is_signable 的白名单判定。
+    """
+    assert manifest.is_signable('frontend/dist/index.html') is True
+    assert manifest.is_signable('frontend/dist/assets/index-abc.js') is True
+    assert 'dist' not in manifest.EXCLUDE_DIRS, 'dist 是同名歧义目录，不能进剪枝黑名单'
+
+
+def test_frontend_dist_survives_pruning():
+    """真实目录树上，frontend/dist 的文件确实会被收进签名。"""
+    # 仓库里一定有构建产物；没有的话这条断言自动跳过
+    dist = REPO / 'frontend' / 'dist'
+    if not dist.is_dir():
+        pytest.skip('仓库里没有 frontend/dist，跳过')
+
+    signed = {
+        p.relative_to(REPO).as_posix()
+        for p in manifest.iter_files(REPO)
+        if p.relative_to(REPO).as_posix().startswith('frontend/dist/')
+    }
+    assert signed, 'frontend/dist 下一个文件都没被签名，剪枝把它错杀了'
+    assert any(name.endswith('index.html') for name in signed), 'index.html 必须被签名'

@@ -39,11 +39,14 @@ MANIFEST_NAME = 'release.json'
 SIGNATURE_NAME = 'release.sig'
 # 便携包里的运行时和日志不参与签名：runtime 由构建机同一个 Python 版本生成，
 # 日志/缓存每次启动都在变，签进去只会让每次校验都失败。
+# 只放"确定不含合法文件"的目录名。这里按名字匹配，不区分层级，
+# 所以像 dist 这种同名歧义的绝不能进来——frontend/dist 是必须签名的前端产物，
+# 而根目录的 dist/ 是 Python 构建残留。歧义交给 is_signable() 的白名单判定。
 EXCLUDE_DIRS = frozenset({
     'runtime', 'log', 'cache', 'screenshots', 'node_modules', '.git',
     '__pycache__', '.ruff_cache', '.uv-cache', 'config',
     # 虚拟环境：在仓库根直接签名时会撞上，2 万多个文件，必须排除
-    '.venv', 'venv', 'env', '.tox', 'dist', 'build-win',
+    '.venv', 'venv', 'env', '.tox',
     # 以下既不进发布包、也不该参与签名，否则清单会随着开发机的本地状态变化：
     'tests', 'docs', 'dev_tools', '.github', '.pytest_cache',
     # 事务更新的工作目录（缓存裸仓库、ready-* 候选版、journal）
