@@ -80,10 +80,12 @@ function Copy-Tree([string]$From, [string]$To, [string[]]$ExcludeDirs = @(), [st
         Write-Host "    skip (missing): $From" -ForegroundColor DarkGray
         return
     }
-    $args = @($From, $To, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:0", "/W:0")
-    if ($ExcludeDirs.Count) { $args += "/XD"; $args += $ExcludeDirs }
-    if ($ExcludeFiles.Count) { $args += "/XF"; $args += $ExcludeFiles }
-    & robocopy @args | Out-Null
+    # $args 是 PowerShell 自动变量（函数参数数组），覆盖它容易引发怪问题，
+    # 这里用 $rcArgs 存 robocopy 的参数列表。
+    $rcArgs = @($From, $To, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:0", "/W:0")
+    if ($ExcludeDirs.Count) { $rcArgs += "/XD"; $rcArgs += $ExcludeDirs }
+    if ($ExcludeFiles.Count) { $rcArgs += "/XF"; $rcArgs += $ExcludeFiles }
+    & robocopy @rcArgs | Out-Null
     # robocopy 的退出码 0-7 都算成功，>=8 才是真失败
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE): $From -> $To" }
 }
@@ -104,8 +106,10 @@ if (-not $SkipRuntime) {
     }
     $VenvCfg = Join-Path $Repo ".venv\pyvenv.cfg"
     if (Test-Path -LiteralPath $VenvCfg) {
-        $Home = (Get-Content -LiteralPath $VenvCfg | Where-Object { $_ -match "^home\s*=" }) -replace "^home\s*=\s*", ""
-        if ($Home -and (Test-Path (Join-Path $Home "python.exe"))) { $Candidates = @($Home) + $Candidates }
+        # $Home 是 PowerShell 的只读内置变量（用户主目录），不能赋值。
+        # 用 $PyHome 存 pyvenv.cfg 里的 home= 路径。
+        $PyHome = (Get-Content -LiteralPath $VenvCfg | Where-Object { $_ -match "^home\s*=" }) -replace "^home\s*=\s*", ""
+        if ($PyHome -and (Test-Path (Join-Path $PyHome "python.exe"))) { $Candidates = @($PyHome) + $Candidates }
     }
 
     if (-not $Candidates.Count) {

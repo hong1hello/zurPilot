@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input'
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ChangeEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getLayout, subscribeLayout } from './layout'
+import { OPEN_SOURCE_URL } from './links'
 import {NavHandle} from './NavHandle'
 import {TabBarResizeHandle} from './TabBarResizeHandle'
 import {SidebarResizeHandle} from './SidebarResizeHandle'
@@ -68,7 +69,7 @@ function ModernNavigation({instance, onNavigate, updateAvailable}: NavigationPro
       <NavLink to="/remote" onClick={onNavigate}><Globe size={17}/>{ui('nav.remote')}</NavLink>
       <NavLink to="/configs" onClick={onNavigate}><FileJson size={17}/>{ui('nav.configs')}</NavLink>
       <NavLink to="/settings" onClick={onNavigate}><Settings2 size={17}/>{ui('nav.settings')}</NavLink>
-      <a className="nav-open-source" href="https://github.com/hong1hello/zurPilot" target="_blank" rel="noreferrer" onClick={onNavigate}><ExternalLink size={17}/>{ui('nav.openSource')}</a>
+      <a className="nav-open-source" href={OPEN_SOURCE_URL} target="_blank" rel="noreferrer" onClick={onNavigate}><ExternalLink size={17}/>{ui('nav.openSource')}</a>
     </>}
     <PluginLinks instance={instance} onNavigate={onNavigate}/>
   </nav>

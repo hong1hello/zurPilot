@@ -19,7 +19,9 @@ from module.config.config_generated import GeneratedConfig
 from module.config.config_manual import ManualConfig
 from module.config.config_updater import ConfigUpdater, ensure_time, get_server_next_update, nearest_future
 from module.config.deep import deep_get, deep_set
-from module.config.schedule_time import parse_next_run, refresh_local_timezone, schedule_local
+from module.config.schedule_time import (
+    parse_next_run, refresh_local_timezone, schedule_local, schedule_utc,
+)
 from module.config.time_source import now as current_time
 from module.config.utils import DEFAULT_TIME, dict_to_kv, filepath_config, get_os_reset_remain, path_to_arg, is_good_gpu
 from module.config.watcher import ConfigWatcher
@@ -468,7 +470,11 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
                 next_run = deep_get(
                     self.data, keys=f"{task}.Scheduler.NextRun", default=None
                 )
-                if isinstance(next_run, datetime) and next_run > limit:
+                # 两边都归一成 UTC 再比。正常路径上 read_file 已经 decode 成本地 naive，
+                # 但手改配置、旧缓存或其它写入路径可能留下带时区的值，直接比会抛
+                # TypeError: can't compare offset-naive and offset-aware datetimes，
+                # 而这会让整个调度器起不来——代价远大于在这里多两次 astimezone。
+                if isinstance(next_run, datetime) and schedule_utc(next_run) > schedule_utc(limit):
                     deep_set(self.data, keys=f"{task}.Scheduler.NextRun", value=now)
 
         limit_next_run(["Commission", "Reward"], limit=now + timedelta(hours=12, seconds=-1))

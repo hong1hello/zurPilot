@@ -145,6 +145,32 @@ def encode_next_run(value):
     return str(value) if isinstance(value, datetime) else value
 
 
+def decode_next_run(value):
+    """读盘转换：带时区的字符串 → 本地 naive datetime。
+
+    这是 `encode_next_run` 的逆运算，也是业务侧看到的口径。
+    必须转成 naive：调度比较用的 `current_time()` 是本地 naive，
+    如果这里留着 tzinfo，`next_run > limit` 会抛
+    `TypeError: can't compare offset-naive and offset-aware datetimes`。
+
+    已是 naive datetime 的值原样返回；解析不了的（默认值、非法字符串）也原样返回，
+    交给下游的 isinstance 判断兜住。
+
+    Args:
+        value: 配置里的 NextRun 原始值。
+
+    Returns:
+        datetime | 原值: 本地 naive datetime，或无法转换时的原值。
+    """
+    moment = parse_next_run(value)
+    if moment is None:
+        return value
+    if moment.tzinfo is None:
+        # 已经是本地 naive（老配置、或刚被其它代码写过），不用动
+        return moment
+    return schedule_local(moment)
+
+
 def display_next_run(value):
     """读盘后转成本地时间用于界面展示。
 

@@ -93,6 +93,39 @@ class GitManager(DeployConfig):
         except Exception:
             return ''
 
+    def _ensure_remote_url(self, source: str) -> bool:
+        """确保远程源地址与配置里的 Repository 一致，不一致就纠正。
+
+        为什么必须在 fetch 之前做：
+        `DeployConfig.config_redirect()` 只归一内存里的 `Repository` 字段，
+        不会去改 `.git/config`。而更新器的版本检查走 `_fetch_with_retry`，
+        它直接 `git fetch origin`——如果 origin 还指着旧地址（上游官方仓库、
+        或者用户历史上从别处克隆留下的），版本检查就会全程对着那个仓库算，
+        界面上显示的项目地址也跟着回去。只有 `git_install` 会 set-url，
+        等到用户点更新才纠正，此时 ahead/behind 已经算错了。
+
+        Args:
+            source (str): 远程源名称。
+
+        Returns:
+            bool: 地址一致或已成功纠正时返回 True；纠正失败返回 False。
+        """
+        wanted = getattr(self, 'Repository', '') or ''
+        if not wanted:
+            return True
+        current = self.get_remote_url(source)
+        if not current:
+            # 远程源还不存在，交给 git_repository_init 去 add
+            return True
+        if current.rstrip('/') == wanted.rstrip('/'):
+            return True
+        logger.warning(f'远程源 {source} 指向 {current}，与配置 {wanted} 不一致，正在纠正')
+        git = f'"{self.git}" -c http.userAgent={self.git_user_agent()}'
+        if self.execute(f'{git} remote set-url {source} {wanted}', allow_failure=True):
+            return True
+        # set-url 失败通常是远程源不存在，尝试 add
+        return bool(self.execute(f'{git} remote add {source} {wanted}', allow_failure=True))
+
     def _fetch_with_retry(self, source, branch, max_retry=5, delay=2):
         """带 UA 重试与同级镜像容灾的 git fetch。
 
@@ -109,6 +142,9 @@ class GitManager(DeployConfig):
         Raises:
             ExecutionError: 所有尝试均失败时抛出。
         """
+        # 先对齐远程地址，再做任何 fetch。放在重试循环之外：地址只纠正一次，
+        # 重试过程中不该反复改，也避免网络问题被误判成地址问题。
+        self._ensure_remote_url(source)
         ua = self.git_user_agent()
         for i in range(max_retry):
             git = f'"{self.git}" -c http.userAgent={ua}'

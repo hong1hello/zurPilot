@@ -14,6 +14,7 @@ import { Button } from '../components/ui/button'
 import { SchedulerWidget } from '../components/SchedulerWidget'
 import { ModernRailResizeHandle } from '../components/ModernRailResizeHandle'
 import { getLayout, subscribeLayout } from '../app/layout'
+import { OPEN_SOURCE_URL } from '../app/links'
 import { readSchedulerPosition, subscribeSchedulerPosition } from '../app/schedulerPositionPrefs'
 import { usePlugins } from '../plugins/context'
 import { PluginLinks, PluginPanels } from '../plugins/views'
@@ -75,7 +76,7 @@ export function TopNavigation({instance, onNavigate, updateAvailable}: Navigatio
     <NavLink to="/remote" onClick={onNavigate}>{ui('nav.remote')}</NavLink>
     <NavLink to="/configs" onClick={onNavigate}>{ui('nav.configs')}</NavLink>
     <NavLink to="/settings" onClick={onNavigate}>{ui('nav.settings')}</NavLink>
-    <a href="https://github.com/wess09/AzurPilot" target="_blank" rel="noreferrer" onClick={onNavigate}>{ui('nav.openSource')}</a>
+    <a href={OPEN_SOURCE_URL} target="_blank" rel="noreferrer" onClick={onNavigate}>{ui('nav.openSource')}</a>
     <PluginLinks instance={instance} onNavigate={onNavigate}/>
     {instance && <PluginLinks onNavigate={onNavigate}/>}
   </nav>

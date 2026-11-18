@@ -39,7 +39,7 @@ from module.campaign.stage_name import normalize_event_stage
 from module.config.deep import deep_default, deep_get, deep_iter, deep_set
 from module.config.env import IS_ON_PHONE_CLOUD
 from module.config.fleet_legacy import LEGACY_PATHS
-from module.config.schedule_time import encode_next_run, map_next_runs
+from module.config.schedule_time import decode_next_run, encode_next_run, map_next_runs
 from module.config.server import VALID_CHANNEL_PACKAGE, VALID_PACKAGE, VALID_SERVER_LIST, to_package, to_server
 from module.config.redirect_utils.shop import migrate_shop_options
 from module.config.task_priority import get_scheduler_tasks, merge_task_priority
@@ -999,10 +999,11 @@ class ConfigUpdater:
             更新后的配置字典。
         """
         old = read_file(filepath_config(config_name))
-        # Scheduler.NextRun 统一固定为带时区的时刻再交给上层。老配置里的本地 naive 时间
-        # 会在这里就地归一化成 UTC，夏令时回拨时调度器才分得清哪一次已经跑过。
-        # 写回是延后的：write_file/update_file 会把归一化后的值一起落盘。
-        map_next_runs(old, encode_next_run)
+        # 磁盘上的 Scheduler.NextRun 是带时区的时刻，这里换成本地 naive 再交给上层。
+        # 方向必须是 decode：`config_update` 会按 schema 把字符串解析成 datetime，
+        # 如果留着 tzinfo，后面 `next_run > now`（now 是本地 naive）就会抛
+        # TypeError: can't compare offset-naive and offset-aware datetimes。
+        map_next_runs(old, decode_next_run)
         new = self.config_update(old, is_template=is_template)
         # 更新后的配置未写回文件，出于性能考虑已注释掉写入操作
         # self.write_file(config_name, new)
@@ -1018,6 +1019,9 @@ class ConfigUpdater:
             data: 要写入的配置数据。
             mod_name: 模块名称，默认为 'alas'。
         """
+        # 落盘前把 NextRun 固定成带时区的时刻，与 read_file 的 decode 成对。
+        # 直接在 data 上改：这里 data 已经是待写的副本，调用方不会再复用。
+        map_next_runs(data, encode_next_run)
         write_file(filepath_config(config_name, mod_name), data)
 
     @timer
