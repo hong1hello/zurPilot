@@ -93,8 +93,41 @@ class GitManager(DeployConfig):
         except Exception:
             return ''
 
+    @staticmethod
+    def _repository_identity(url: str) -> str:
+        """把仓库地址归一成 `host/path` 形态，用于判断是否同一个仓库。
+
+        同一个仓库可以有很多写法：
+            git@github.com:owner/repo.git
+            https://github.com/owner/repo
+            ssh://git@github.com/owner/repo.git
+        这些指向同一处，不该因为协议不同就互相改写——开发机的 origin 常是 SSH
+        （推送用），而配置里的 Repository 是 HTTPS（用户拉取用），两者必须共存。
+
+        Args:
+            url (str): 任意形态的仓库地址。
+
+        Returns:
+            str: `host/path` 形式的小写标识；无法解析时返回原串。
+        """
+        value = (url or '').strip().rstrip('/')
+        if not value:
+            return ''
+        # scp 风格：git@host:path
+        if '://' not in value and '@' in value and ':' in value.split('@', 1)[1]:
+            host, _, path = value.split('@', 1)[1].partition(':')
+        else:
+            from urllib.parse import urlsplit
+            parsed = urlsplit(value)
+            host = parsed.hostname or ''
+            path = parsed.path
+        path = path.strip('/')
+        if path.endswith('.git'):
+            path = path[:-4]
+        return f'{host.lower()}/{path}' if host else path
+
     def _ensure_remote_url(self, source: str) -> bool:
-        """确保远程源地址与配置里的 Repository 一致，不一致就纠正。
+        """确保远程源指向配置里的仓库，指向别的仓库才纠正。
 
         为什么必须在 fetch 之前做：
         `DeployConfig.config_redirect()` 只归一内存里的 `Repository` 字段，
@@ -103,6 +136,9 @@ class GitManager(DeployConfig):
         或者用户历史上从别处克隆留下的），版本检查就会全程对着那个仓库算，
         界面上显示的项目地址也跟着回去。只有 `git_install` 会 set-url，
         等到用户点更新才纠正，此时 ahead/behind 已经算错了。
+
+        判据是「仓库标识」而不是字符串相等：同一仓库的 SSH 与 HTTPS 写法
+        算一致，这样开发机的 SSH remote 不会被改成 HTTPS（否则推送就要凭据）。
 
         Args:
             source (str): 远程源名称。
@@ -117,7 +153,8 @@ class GitManager(DeployConfig):
         if not current:
             # 远程源还不存在，交给 git_repository_init 去 add
             return True
-        if current.rstrip('/') == wanted.rstrip('/'):
+        if self._repository_identity(current) == self._repository_identity(wanted):
+            # 同一个仓库，只是协议或 .git 后缀写法不同，保持原样
             return True
         logger.warning(f'远程源 {source} 指向 {current}，与配置 {wanted} 不一致，正在纠正')
         git = f'"{self.git}" -c http.userAgent={self.git_user_agent()}'
