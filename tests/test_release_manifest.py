@@ -7,6 +7,8 @@
 4. 探活/日志目录必须被排除在签名范围外
 
 后两条最容易在重构时悄悄失效，所以显式钉住。
+另外还钉住 cryptography 与 pycryptodome 两个后端必须互操作——
+打包机用前者，便携包侧只有后者。
 """
 import sys
 from pathlib import Path
@@ -18,28 +20,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 import release_manifest as manifest
 
 
-cryptography = pytest.importorskip('cryptography')
+def _any_backend_available():
+    """至少有一个签名后端可用，整个文件才有意义。"""
+    try:
+        import cryptography  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    try:
+        from Crypto.PublicKey import ECC  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+if not _any_backend_available():
+    pytest.skip('没有可用的签名后端', allow_module_level=True)
+
+
+def _make_keys(tmp_path, name, backend):
+    """按指定后端生成一对密钥。
+
+    Args:
+        tmp_path (Path): 临时目录。
+        name (str): 文件名前缀。
+        backend (str): 'cryptography' 或 'pycryptodome'。
+
+    Returns:
+        tuple[Path, Path]: (私钥路径, 公钥路径)。
+    """
+    private_path = tmp_path / f'{name}-private.pem'
+    public_path = tmp_path / f'{name}-public.pem'
+    if backend == 'cryptography':
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        key = Ed25519PrivateKey.generate()
+        private_path.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+        public_path.write_bytes(key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ))
+    else:
+        from Crypto.PublicKey import ECC
+
+        key = ECC.generate(curve='ed25519')
+        private_path.write_text(key.export_key(format='PEM'), encoding='ascii')
+        public_path.write_text(key.public_key().export_key(format='PEM'), encoding='ascii')
+    return private_path, public_path
 
 
 @pytest.fixture()
 def keys(tmp_path):
-    """生成一对临时 Ed25519 密钥。"""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    """生成一对临时 Ed25519 密钥。
 
-    key = Ed25519PrivateKey.generate()
-    private_path = tmp_path / 'private.pem'
-    public_path = tmp_path / 'public.pem'
-    private_path.write_bytes(key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ))
-    public_path.write_bytes(key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ))
-    return private_path, public_path
+    用当前可用的后端生成，避免在只有 pycryptodome 的环境里直接跳过。
+    """
+    backend = 'cryptography' if manifest._has_cryptography() else 'pycryptodome'
+    return _make_keys(tmp_path, 'fixture', backend)
 
 
 @pytest.fixture()
@@ -129,15 +171,9 @@ def test_verify_rejects_tampered_payload(pkg, keys):
 
 
 def test_verify_rejects_other_key(pkg, keys, tmp_path):
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
+    """换一把公钥必须验不过。"""
     private_path, _ = keys
-    other = tmp_path / 'other-public.pem'
-    other.write_bytes(Ed25519PrivateKey.generate().public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ))
+    _, other = _make_keys(tmp_path, 'other', 'cryptography' if manifest._has_cryptography() else 'pycryptodome')
     payload = manifest.build(pkg)
     payload['revision'] = 'a' * 40
     signature = manifest.sign(payload, private_path)
@@ -204,6 +240,102 @@ def test_manifest_itself_is_not_signed(pkg, keys):
     signature = manifest.sign(payload, private_path)
     manifest.write_manifest(pkg, payload, signature)
     assert manifest.build(pkg)['filesSha256'] == payload['filesSha256']
+
+
+# ── 双后端互操作 ───────────────────────────────────────────────────────────
+# 打包机上有 cryptography，便携包侧只有 pycryptodome（pyproject 的直接依赖）。
+# 两边必须能互相验签，否则包里签出来的东西用户那边根本验不了。
+
+def _force_backend(monkeypatch, name):
+    """把 manifest 的后端选择钉死到指定实现。
+
+    Args:
+        monkeypatch: pytest 的 monkeypatch fixture。
+        name (str): 'cryptography' 或 'pycryptodome'。
+
+    Returns:
+        bool: 该后端在本机是否可用。
+    """
+    if name == 'cryptography':
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            return False
+        monkeypatch.setattr(manifest, '_CRYPTOGRAPHY', True)
+        return True
+    try:
+        from Crypto.PublicKey import ECC  # noqa: F401
+    except ImportError:
+        return False
+    monkeypatch.setattr(manifest, '_CRYPTOGRAPHY', False)
+    return True
+
+
+def _payload():
+    return {
+        'schema': manifest.SCHEMA,
+        'sequence': 1,
+        'revision': 'a' * 40,
+        'dependencies': 'c' * 64,
+        'filesSha256': 'd' * 64,
+    }
+
+
+@pytest.mark.parametrize('backend', ['cryptography', 'pycryptodome'])
+def test_backend_sign_verify_round_trip(monkeypatch, tmp_path, backend):
+    """每个后端各自签、各自验，都要通过。"""
+    if not _force_backend(monkeypatch, backend):
+        pytest.skip(f'{backend} 在本机不可用')
+    private_path, public_path = _make_keys(tmp_path, backend, backend)
+    payload = _payload()
+    signature = manifest.sign(payload, private_path)
+    assert manifest.verify(payload, signature, public_path) is True
+
+
+@pytest.mark.parametrize('signer,verifier', [
+    ('cryptography', 'pycryptodome'),
+    ('pycryptodome', 'cryptography'),
+])
+def test_backends_interoperate(monkeypatch, tmp_path, signer, verifier):
+    """一个后端签出的签名，另一个后端必须能验。
+
+    这条是整个方案能成立的前提：包里只有 pycryptodome，
+    而包是打包机用 cryptography 签的。
+    """
+    if not _force_backend(monkeypatch, signer):
+        pytest.skip(f'{signer} 在本机不可用')
+    private_path, public_path = _make_keys(tmp_path, signer, signer)
+    payload = _payload()
+    signature = manifest.sign(payload, private_path)
+
+    if not _force_backend(monkeypatch, verifier):
+        pytest.skip(f'{verifier} 在本机不可用')
+    assert manifest.verify(payload, signature, public_path) is True
+
+
+@pytest.mark.parametrize('backend', ['cryptography', 'pycryptodome'])
+def test_backend_rejects_tampering(monkeypatch, tmp_path, backend):
+    """任一后端都不能放过被改过的清单。"""
+    if not _force_backend(monkeypatch, backend):
+        pytest.skip(f'{backend} 在本机不可用')
+    private_path, public_path = _make_keys(tmp_path, backend, backend)
+    payload = _payload()
+    signature = manifest.sign(payload, private_path)
+    payload['revision'] = 'b' * 40
+    assert manifest.verify(payload, signature, public_path) is False
+
+
+def test_has_cryptography_probe_is_cached():
+    """后端探测只做一次，结果缓存在模块变量里。"""
+    original = manifest._CRYPTOGRAPHY
+    try:
+        manifest._CRYPTOGRAPHY = None
+        first = manifest._has_cryptography()
+        assert manifest._CRYPTOGRAPHY is first
+        # 再调一次不应重新探测，直接返回缓存
+        assert manifest._has_cryptography() is first
+    finally:
+        manifest._CRYPTOGRAPHY = original
 
 
 def test_read_manifest_returns_none_for_missing(pkg):

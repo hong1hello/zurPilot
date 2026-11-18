@@ -51,6 +51,11 @@ EXCLUDE_NAMES = frozenset({
 _HEX40 = re.compile(r'[0-9a-f]{40}')
 _HEX64 = re.compile(r'[0-9a-f]{64}')
 
+# cryptography 是否可用。None 表示还没探测过。
+# 优先用它，是因为它在打包机上一定有（uv 的依赖图带进来的）；
+# 回退到 pycryptodome 是为了便携包侧——它是 pyproject 的直接依赖，必然存在。
+_CRYPTOGRAPHY = None
+
 
 def canonical(value):
     """把对象序列化成签名用的规范字节。
@@ -187,14 +192,40 @@ def sign(payload, private_key_path, password=None):
         str: base64 编码的签名。
 
     Raises:
-        ImportError: 缺少 cryptography。
+        ImportError: 两个后端都不可用。
     """
-    from cryptography.hazmat.primitives import serialization
-
     key_data = Path(private_key_path).read_bytes()
-    private_key = serialization.load_pem_private_key(key_data, password=password)
-    signature = private_key.sign(canonical(payload))
+    message = canonical(payload)
+
+    if _has_cryptography():
+        from cryptography.hazmat.primitives import serialization
+
+        private_key = serialization.load_pem_private_key(key_data, password=password)
+        return base64.b64encode(private_key.sign(message)).decode('ascii')
+
+    # 回退到 pycryptodome。它是 pyproject 的直接依赖，便携包里一定有，
+    # 而 cryptography 只是间接依赖，用户机器上不保证。
+    from Crypto.PublicKey import ECC
+    from Crypto.Signature import eddsa
+
+    if password:
+        private_key = ECC.import_key(key_data, passphrase=password)
+    else:
+        private_key = ECC.import_key(key_data)
+    signature = eddsa.new(private_key, 'rfc8032').sign(message)
     return base64.b64encode(signature).decode('ascii')
+
+
+def _has_cryptography():
+    """cryptography 是否可用（只探测一次，避免反复 import）。"""
+    global _CRYPTOGRAPHY
+    if _CRYPTOGRAPHY is None:
+        try:
+            import cryptography  # noqa: F401
+            _CRYPTOGRAPHY = True
+        except ImportError:
+            _CRYPTOGRAPHY = False
+    return _CRYPTOGRAPHY
 
 
 def verify(payload, signature, public_key_path):
@@ -208,17 +239,33 @@ def verify(payload, signature, public_key_path):
     Returns:
         bool: 验签通过返回 True；格式不对或验签失败返回 False，不抛异常。
     """
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.exceptions import InvalidSignature
-
     try:
         key_data = Path(public_key_path).read_bytes()
-        public_key = serialization.load_pem_public_key(key_data)
-        public_key.verify(
-            base64.b64decode(signature, validate=True), canonical(payload)
-        )
+        raw_signature = base64.b64decode(signature, validate=True)
+        message = canonical(payload)
+    except (ValueError, OSError, TypeError):
+        return False
+
+    if _has_cryptography():
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import serialization
+
+        try:
+            public_key = serialization.load_pem_public_key(key_data)
+            public_key.verify(raw_signature, message)
+            return True
+        except (InvalidSignature, ValueError, TypeError):
+            return False
+
+    # 回退到 pycryptodome：eddsa.verify 失败抛 ValueError
+    from Crypto.PublicKey import ECC
+    from Crypto.Signature import eddsa
+
+    try:
+        public_key = ECC.import_key(key_data)
+        eddsa.new(public_key, 'rfc8032').verify(message, raw_signature)
         return True
-    except (InvalidSignature, ValueError, OSError, TypeError):
+    except (ValueError, TypeError):
         return False
 
 

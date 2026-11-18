@@ -29,9 +29,6 @@ import release_manifest as manifest
 
 def cmd_keygen(args):
     """生成 Ed25519 密钥对。"""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     private_path = out / 'ed25519-private.pem'
@@ -40,25 +37,74 @@ def cmd_keygen(args):
         print(f'{private_path} 已存在，加 --force 覆盖（覆盖后旧签名全部失效）')
         return 1
 
-    password = args.password.encode() if args.password else None
-    encryption = (
-        serialization.BestAvailableEncryption(password) if password
-        else serialization.NoEncryption()
-    )
-    key = Ed25519PrivateKey.generate()
-    private_path.write_bytes(key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=encryption,
-    ))
-    public_path.write_bytes(key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ))
+    if not _write_keys(private_path, public_path, args.password or None):
+        return 1
     print(f'私钥: {private_path}  （不要提交，不要分发）')
     print(f'公钥: {public_path}  （提交进仓库，随包分发）')
     print(f'公钥 SHA-256: {manifest.digest(public_path)}')
     return 0
+
+
+def _write_keys(private_path, public_path, password):
+    """按可用后端生成密钥对并写盘。
+
+    Args:
+        private_path (Path): 私钥输出路径。
+        public_path (Path): 公钥输出路径。
+        password (str | None): 私钥口令，None 表示不加密。
+
+    Returns:
+        bool: 成功写盘返回 True。
+
+    Raises:
+        SystemExit: 两个后端都不可用时抛出，提示先跑 uv sync。
+    """
+    if manifest._has_cryptography():
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        secret = password.encode() if password else None
+        encryption = (
+            serialization.BestAvailableEncryption(secret) if secret
+            else serialization.NoEncryption()
+        )
+        key = Ed25519PrivateKey.generate()
+        private_path.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=encryption,
+        ))
+        public_path.write_bytes(key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ))
+        return True
+
+    try:
+        from Crypto.PublicKey import ECC
+    except ImportError:
+        print('两个签名后端都不可用：先跑 uv sync（需要 cryptography 或 pycryptodome）', file=sys.stderr)
+        raise SystemExit(1)
+
+    key = ECC.generate(curve='ed25519')
+    private_pem = key.export_key(
+        format='PEM', passphrase=password, protection='PBKDF2WithHMAC-SHA512AndAES256-CBC'
+    ) if password else key.export_key(format='PEM')
+    private_path.write_text(private_ensure_pkcs8(private_pem), encoding='ascii')
+    public_path.write_text(key.public_key().export_key(format='PEM'), encoding='ascii')
+    return True
+
+
+def private_ensure_pkcs8(pem):
+    """pycryptodome 导出的私钥头与 cryptography 一致，这里只做换行规范化。
+
+    Args:
+        pem (str): PEM 文本。
+
+    Returns:
+        str: 以换行结尾的 PEM 文本。
+    """
+    return pem if pem.endswith('\n') else pem + '\n'
 
 
 def cmd_sign(args):
