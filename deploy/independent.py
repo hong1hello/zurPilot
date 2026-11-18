@@ -67,7 +67,10 @@ MAX_SOURCE_SIZE = 200 * 1024 * 1024
 
 # git 调用超时。fetch 在慢网下可能要几分钟，但必须有上界。
 GIT_TIMEOUT = 210
-GIT_SHORT_TIMEOUT = 15
+# ls-remote 的超时。不能设太紧：国内直连 GitHub 的 HTTPS 握手就要 20 秒上下，
+# 实测从国内一次完整的 ls-remote 需要 21 秒（含 21 秒才报 could not connect）。
+# 15 秒会把「网络慢」误判成「分支不存在」，用户看到的是莫名其妙的更新失败。
+GIT_SHORT_TIMEOUT = 45
 
 _HEX40 = re.compile(r'[0-9a-f]{40}')
 _HEX64 = re.compile(r'[0-9a-f]{64}')
@@ -226,6 +229,11 @@ def app_path(name, *, frontend=False, build_frontend=False):
             posix.name == 'template.json'
             or (posix.name.startswith('deploy.template') and posix.suffix == '.yaml')
         )
+    if posix.parts[0] == 'frontend':
+        # 只放行构建产物 frontend/dist/**。
+        # 不能整段收下 frontend/：那里有源码和 node_modules，几万个文件，
+        # 一旦进了更新包，apply 会逐文件哈希比对，慢到不可用。
+        return len(posix.parts) > 2 and posix.parts[1] == 'dist'
     return posix.parts[0] in APP_DIRS
 
 

@@ -66,6 +66,7 @@ EXIT_PORT_LISTEN_TIMEOUT = 75          # WebUI 子进程端口监听/就绪超�
 EXIT_WEBUI_RUNTIME_CRASH = 76          # WebUI 启动就绪后反复意外崩溃
 EXIT_PROCESS_TERMINATE_FAILURE = 77    # WebUI 子进程未能终止/无法停止
 EXIT_IPC_FAILURE = 78                  # 进程间通信或重载状态读取异常
+EXIT_UPDATE_RECOVERY_FAILURE = 79      # 未完成的更新回滚失败，需人工介入
 
 
 class FatalStartupError(Exception):
@@ -1325,6 +1326,93 @@ def run_tui(instance: Optional[str] = None) -> int:
     return 0
 
 
+def _restart_self() -> None:
+    """用同一份命令行参数重新执行自身。
+
+    回滚会替换磁盘上的应用文件，而当前进程已经 import 过那些模块，
+    内存里还是「新版」的代码。只有替换进程映像才能真的跑到恢复后的版本。
+
+    用 execv 而不是另起子进程：进程号不变，外层的 .bat 拿到的
+    errorlevel 就是重启后进程的结果，不会出现「父进程成功、子进程失败」
+    这种没人接的返回码。
+    """
+    executable = sys.executable or 'python'
+    os.execv(executable, [executable, *sys.argv])
+
+
+def _recover_pending_update() -> Optional[int]:
+    """启动前续上未完成的更新回滚。
+
+    为什么必须在启动最前面做：
+    事务更新是先写文件、再写 journal(trial)，靠一次成功启动来确认。如果进程
+    在 apply() 之后、confirm() 之前被杀（断电、强杀、或新版本自己起不来），
+    磁盘上就留着「journal 还在 + 代码已换成新版」。此时不回滚，用户每次启动
+    都跑那个起不来的版本，等于永久变砖——而且他会以为是自己环境坏了。
+
+    放在 database.initialize() 之前还有一个原因：回滚会把整个 config/
+    目录换成快照，如果数据库已经初始化过，句柄会挡住目录替换（Windows 上
+    表现为 WinError 5）。
+
+    Returns:
+        Optional[int]: 需要中止启动时返回退出码；可以继续启动时返回 None。
+    """
+    try:
+        from deploy.independent import recover, trial_pending
+    except Exception:
+        # 精简部署（例如 Android 版）不带这个模块，回滚能力缺失不影响启动
+        return None
+
+    try:
+        if not trial_pending():
+            return None
+    except Exception as exc:
+        logger.error_context(
+            title='更新状态读取失败',
+            reason=str(exc),
+            exc=exc,
+            impact='无法判断上一轮更新是否完成，继续启动有跑在半更新版本上的风险。',
+            action='保留整个程序目录，压缩后提交反馈；不要手动删除 .azurpilot 目录。',
+            level=50,
+        )
+        return EXIT_UPDATE_RECOVERY_FAILURE
+
+    logger.warning('[GUI] 检测到上一轮更新未确认，开始回滚到更新前的版本')
+    try:
+        recovered = recover()
+    except Exception as exc:
+        logger.error_context(
+            title='更新回滚失败',
+            reason=str(exc),
+            exc=exc,
+            impact='当前安装可能停在半更新状态，调度器与前端可能不一致。',
+            action='保留整个程序目录（含 .azurpilot 与 config），压缩后提交反馈；'
+                   '不要手动删除 journal，它是恢复的唯一依据。',
+            level=50,
+        )
+        return EXIT_UPDATE_RECOVERY_FAILURE
+
+    if not recovered:
+        # 两次检查之间 journal 消失，说明另一个进程已经恢复完，继续启动即可
+        logger.warning('[GUI] 回滚记录已消失，按正常启动继续')
+        return None
+
+    logger.warning('[GUI] 回滚完成，重启以加载恢复后的版本')
+    try:
+        _restart_self()
+    except OSError as exc:
+        logger.error_context(
+            title='回滚后重启失败',
+            reason=str(exc),
+            exc=exc,
+            impact='文件已恢复为更新前的版本，但需要手动重新启动程序。',
+            action='关闭本窗口，重新双击启动脚本。',
+            level=40,
+        )
+        return EXIT_STARTUP_FAILURE
+    # execv 成功时不会回到这里
+    return EXIT_SUCCESS
+
+
 def main() -> int:
     """初始化普通业务数据，按 ``--tui`` 启动终端界面，否则启动 WebUI。"""
     # Windows 父进程保留启动日志；文件不可写时继续输出到控制台。
@@ -1333,6 +1421,13 @@ def main() -> int:
     except OSError:
         logger.warning('[GUI] 启动文件日志不可用，继续输出到控制台')
     logger.info('[GUI] 开始检查普通业务存储；启动日志：%s', logger.log_file or '控制台')
+
+    # 未完成的更新回滚必须排在数据库之前：回滚会整目录替换 config，
+    # 数据库一旦初始化就持有句柄，Windows 上会挡住替换。
+    recovery_exit = _recover_pending_update()
+    if recovery_exit is not None:
+        return recovery_exit
+
     try:
         from module.persistence.database import initialize
         initialize()

@@ -60,6 +60,22 @@ def test_app_path_restricts_config_to_templates():
     assert ind.app_path('config/deploy.yaml') is False
 
 
+def test_app_path_allows_frontend_dist_only():
+    """frontend 只放行 dist/ 下的构建产物。
+
+    整段收下 frontend/ 会把源码和 node_modules 一起带进更新包，
+    apply 要逐文件哈希比对几万个文件，实际不可用。
+    """
+    assert ind.app_path('frontend/dist/index.html') is True
+    assert ind.app_path('frontend/dist/assets/index-abc.js') is True
+    # 源码与依赖不进包
+    assert ind.app_path('frontend/package.json') is False
+    assert ind.app_path('frontend/src/App.tsx') is False
+    assert ind.app_path('frontend/node_modules/react/index.js') is False
+    # dist 目录本身（没有文件名）不算
+    assert ind.app_path('frontend/dist') is False
+
+
 def test_app_path_frontend_scope():
     assert ind.app_path('frontend/dist/index.html', frontend=True) is True
     assert ind.app_path('frontend/dist/assets/a.js', frontend=True) is True
