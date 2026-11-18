@@ -59,6 +59,7 @@ test/*
 # Documentation
 docs/*
 !docs/modules/
+!docs/windows-portable-signing.md
 
 # Local directories
 /Alasio
@@ -248,3 +249,9 @@ cursor-helper/**/review/reports/files/
 /config/fleet/
 /pytest-of-AzurLane
 /tmp5nvjit1d
+
+# 便携包发布签名私钥：只能存在打包机上，绝不能进仓库
+# 公钥（ed25519-public.pem）要提交，所以这里只排除私钥
+keys/ed25519-private.pem
+keys/*-private.pem
+*.private.pem

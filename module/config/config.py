@@ -19,6 +19,7 @@ from module.config.config_generated import GeneratedConfig
 from module.config.config_manual import ManualConfig
 from module.config.config_updater import ConfigUpdater, ensure_time, get_server_next_update, nearest_future
 from module.config.deep import deep_get, deep_set
+from module.config.schedule_time import parse_next_run, refresh_local_timezone, schedule_local
 from module.config.time_source import now as current_time
 from module.config.utils import DEFAULT_TIME, dict_to_kv, filepath_config, get_os_reset_remain, path_to_arg, is_good_gpu
 from module.config.watcher import ConfigWatcher
@@ -52,7 +53,12 @@ class Function:
     def __init__(self, data):
         self.enable = deep_get(data, keys="Scheduler.Enable", default=False)
         self.command = deep_get(data, keys="Scheduler.Command", default="Unknown")
-        self.next_run = deep_get(data, keys="Scheduler.NextRun", default=DEFAULT_TIME)
+        # 磁盘上的 NextRun 是带时区的 ISO 字符串（见 module.config.schedule_time），
+        # 这里统一解析成本地 naive datetime，调度循环内所有比较都在同一口径上做。
+        # 解析不了的（默认值、极早期日期）保持原值，交给下游的 isinstance 判断兜住。
+        raw = deep_get(data, keys="Scheduler.NextRun", default=DEFAULT_TIME)
+        moment = parse_next_run(raw)
+        self.next_run = schedule_local(moment) if moment is not None else raw
 
     def __str__(self):
         enable = "Enable" if self.enable else "Disable"
@@ -323,6 +329,9 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
 
     def get_next_task(self):
         """计算任务队列，设置 pending_task 和 waiting_task。"""
+        # Windows 的 CRT 会缓存时区，长跑进程跨夏令时边界时必须主动重读，
+        # 否则 next_run 换算出的本地时刻会整体偏一小时。
+        refresh_local_timezone()
         pending = []
         waiting = []
         error = []

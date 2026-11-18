@@ -22,18 +22,44 @@
 .PARAMETER NoZip
     只生成目录，不压 zip
 
+.PARAMETER NoProbe
+    跳过启动探活。默认会真起一次 WebUI，验证 /healthz 与前端能挂上；
+    只有明明知道产物有问题、只想快速出个目录时才用。
+
+.PARAMETER ProbeTimeout
+    探活总等待秒数，默认 60。机器慢或者首次 import 大量依赖时往上调。
+
+.PARAMETER SignKey
+    Ed25519 私钥（PEM）路径。给了就对产物签名，写出 release.json。
+    私钥用 scripts\release_manifest_cli.py keygen 生成，只放构建机上。
+
+.PARAMETER SignPassword
+    私钥口令。不加密的私钥不用传。
+
+.PARAMETER Revision
+    写进清单的 40 位 commit sha，默认取 git rev-parse HEAD。
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\build_windows_portable.ps1
 
 .EXAMPLE
     # 第二次迭代，运行时没变，只重打源码和前端
     powershell -ExecutionPolicy Bypass -File scripts\build_windows_portable.ps1 -SkipRuntime
+
+.EXAMPLE
+    # 正式发布：签名
+    powershell -ExecutionPolicy Bypass -File scripts\build_windows_portable.ps1 -SkipRuntime -SignKey keys\ed25519-private.pem
 #>
 [CmdletBinding()]
 param(
     [string]$OutDir = "",
     [switch]$SkipRuntime,
-    [switch]$NoZip
+    [switch]$NoZip,
+    [switch]$NoProbe,
+    [int]$ProbeTimeout = 60,
+    [string]$SignKey = "",
+    [string]$SignPassword = "",
+    [string]$Revision = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -201,8 +227,82 @@ AzurPilot 便携版（Windows x64）
 "@
 Set-Content -LiteralPath (Join-Path $Stage "README.txt") -Value $Readme -Encoding UTF8
 
-# ── 4. 打包 ─────────────────────────────────────────────────────────────────
+# ── 4. 启动探活 ─────────────────────────────────────────────────────────────
+# 产物不是"能起"的，用户双击只会看到一屏 traceback。这里真起一次 WebUI：
+# 用内核分配的空闲端口，断言 /healthz 返回 200 且 / 正文里有 <div id="root">。
+# 探活用便携包自己的 runtime 跑，所以测的就是用户拿到手的那套依赖。
+if (-not $NoProbe) {
+    Write-Step "启动探活"
+    $ProbeScript = Join-Path $Stage "scripts\probe_portable.py"
+    $StagePython = Join-Path $Stage "runtime\python.exe"
+    if (-not (Test-Path -LiteralPath $ProbeScript)) {
+        throw "缺少 $ProbeScript，无法探活"
+    }
+    Write-Host "    在空闲端口上真起一次 WebUI（最多等 ${ProbeTimeout}s）..."
+    # 探活子进程同样要带 runtime 到 PATH，跟 AzurPilot.bat 保持一致
+    $env:PATH = (Join-Path $Stage "runtime") + ";" + (Join-Path $Stage "runtime\Library\bin") + ";" + $env:PATH
+    & $StagePython $ProbeScript --root $Stage --timeout $ProbeTimeout
+    if ($LASTEXITCODE -ne 0) {
+        # 失败时不直接 throw，把日志和标记留下，方便用户/CI 取证
+        $Marker = Join-Path $Stage "PROBE-FAILED.txt"
+        $LogFile = Join-Path $Stage "log\probe-stdout.log"
+        $Detail = ""
+        if (Test-Path -LiteralPath $LogFile) {
+            $Detail = (Get-Content -LiteralPath $LogFile -Tail 40 -ErrorAction SilentlyContinue) -join "`r`n"
+        }
+        $MarkerText = "启动探活失败（退出码 $LASTEXITCODE）`r`n时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`r`n`r`n--- log\probe-stdout.log 末尾 ---`r`n$Detail`r`n"
+        Set-Content -LiteralPath $Marker -Value $MarkerText -Encoding UTF8
+        throw "启动探活失败，产物不可用。详情见 $Marker"
+    }
+    Write-Host "    探活通过" -ForegroundColor Green
+}
+
+# ── 5. 打包 ─────────────────────────────────────────────────────────────────
 Write-Step "汇总"
+# 探活留下的临时文件不该进用户手里的包：日志是构建机现场的，summary 只给 CI 看。
+$ProbeLog = Join-Path $Stage "log\probe-stdout.log"
+if (Test-Path -LiteralPath $ProbeLog) { Remove-Item -LiteralPath $ProbeLog -Force }
+$ProbeSummary = Join-Path $Stage "probe-summary.json"
+if (Test-Path -LiteralPath $ProbeSummary) { Remove-Item -LiteralPath $ProbeSummary -Force }
+$ProbeMarker = Join-Path $Stage "PROBE-FAILED.txt"
+if (Test-Path -LiteralPath $ProbeMarker) { Remove-Item -LiteralPath $ProbeMarker -Force }
+
+# 签名放在清理之后：清单必须描述最终形态的包，早签会把探活残留算进哈希。
+if ($SignKey) {
+    Write-Step "签名发布清单"
+    $key = $SignKey
+    if (-not [System.IO.Path]::IsPathRooted($key)) { $key = Join-Path $Repo $key }
+    if (-not (Test-Path -LiteralPath $key)) { throw "找不到私钥: $key" }
+
+    if (-not $Revision) {
+        # 打包机上从仓库当前 HEAD 取，保证清单能对上源码
+        Push-Location $Repo
+        try {
+            $Revision = (& git rev-parse HEAD 2>$null)
+            if ($LASTEXITCODE -ne 0 -or -not $Revision) {
+                Write-Host "    ! 取不到 git HEAD，revision 留全 0" -ForegroundColor Yellow
+                $Revision = ""
+            }
+            else {
+                $Revision = $Revision.Trim()
+            }
+        }
+        finally { Pop-Location }
+    }
+
+    $SignScript = Join-Path $Repo "scripts\release_manifest_cli.py"
+    # 用仓库自己的 .venv：打包机上有 cryptography，便携包里的 runtime 未必有
+    $HostPython = Join-Path $Repo ".venv\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $HostPython)) { $HostPython = "python" }
+
+    $SignArgs = @($SignScript, "sign", "--root", $Stage, "--key", $key)
+    if ($SignPassword) { $SignArgs += @("--password", $SignPassword) }
+    if ($Revision) { $SignArgs += @("--revision", $Revision) }
+
+    & $HostPython @SignArgs
+    if ($LASTEXITCODE -ne 0) { throw "签名失败（退出码 $LASTEXITCODE）" }
+}
+
 $Size = [math]::Round(((Get-ChildItem -LiteralPath $Stage -Recurse -File | Measure-Object -Property Length -Sum).Sum) / 1MB, 1)
 Write-Host "    目录: $Stage"
 Write-Host "    体积: ${Size}MB"

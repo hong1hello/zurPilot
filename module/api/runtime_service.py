@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from rich.console import Console
 
 from module.api.protocol import ApiError
+from module.config.schedule_time import display_next_run
 from module.config.server import to_server
 from module.persistence.database import configured_database, get_database
 from module.logger import logger
@@ -169,7 +170,9 @@ class RuntimeService:
                 continue
             scheduler = groups.get('Scheduler', {})
             if scheduler.get('Enable') or task == running:
-                next_run = str(scheduler.get('NextRun', ''))
+                # NextRun 在磁盘上是带时区的时刻，直接按字符串比较会拿 UTC 和本地时间对撞。
+                # 先换成本地 naive 字符串，和下面的 now 用同一口径比。
+                next_run = display_next_run(scheduler.get('NextRun', ''))
                 tasks.append({'name': task, 'nextRun': next_run, 'pending': next_run.replace('T', ' ') <= now,
                               'state': 'running' if task == running else 'pending' if next_run.replace('T', ' ') <= now else 'waiting'})
         from module.config.task_priority import parse_task_priority

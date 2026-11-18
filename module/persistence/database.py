@@ -17,10 +17,39 @@ DEFAULT_DIRECTORY = Path(__file__).resolve().parents[2] / 'config'
 _configured_directory = Path(os.environ.get('AZURPILOT_CONFIG_DIR', DEFAULT_DIRECTORY)).absolute()
 _directory = ContextVar('business_database_directory', default=None)
 
+# SQLite 在并发写入时用这几个错误码表示"现在拿不到锁，稍后重试就能成功"。
+# 它们和真正的数据错误（约束冲突、磁盘满）必须区分开：前者要重排队，
+# 后者重试多少次都不会好，只能丢弃或上报。
+_BUSY_CODES = frozenset({
+    5,   # SQLITE_BUSY
+    6,   # SQLITE_LOCKED
+})
+_BUSY_MESSAGES = ('database is locked', 'database table is locked')
+
+
+def is_busy(error):
+    """判断 SQLite 异常是不是锁冲突（可重试）。
+
+    Args:
+        error (BaseException): 捕获到的异常。
+
+    Returns:
+        bool: 属于锁冲突、重试可能成功时返回 True。
+    """
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    code = getattr(error, 'sqlite_errorcode', None)
+    if code is not None and code in _BUSY_CODES:
+        return True
+    message = str(error).lower()
+    return any(marker in message for marker in _BUSY_MESSAGES)
+
 
 def current_directory():
     """返回当前业务调用绑定的配置目录。"""
     return _directory.get() or _configured_directory
+
+
 _databases = {}
 _guard = threading.RLock()
 
@@ -178,6 +207,29 @@ class BusinessDatabase:
         finally:
             for suffix in ('', '-wal', '-shm'):
                 temporary.with_name(temporary.name + suffix).unlink(missing_ok=True)
+
+    def close_all(self):
+        """把 WAL 落盘并标记为未就绪，供重启或退出时释放文件。
+
+        连接都是短生命周期的（`transaction` 用 `closing` 包住），没有常驻连接池要关。
+        真正要做的是两件事：把 WAL 检查点写回主库文件，避免进程被杀时丢掉最近的写入；
+        再把 `_ready` 复位，下次访问强制重新走一遍迁移检查。
+        数据库还没建立时直接返回，不能因为"没开过库"就抛异常。
+        """
+        with self._lock:
+            if not self.path.is_file():
+                self._ready = False
+                return
+            try:
+                with closing(sqlite3.connect(self.path, timeout=10.0)) as connection:
+                    # TRUNCATE 会把 -wal 清空，退出后目录里不留残留文件。
+                    connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                    connection.commit()
+            except sqlite3.Error:
+                # 关闭阶段失败不该阻断进程退出，下次打开时 SQLite 会自行恢复。
+                pass
+            finally:
+                self._ready = False
 
 
 def get_database(config_directory=None):
