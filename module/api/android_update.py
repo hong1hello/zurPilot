@@ -242,11 +242,15 @@ class AndroidUpdateService:
             if code:
                 raise RuntimeError(f'git init 失败: {err}')
         remote = self._git_remote()
-        code, _, err = self._git('remote', 'add', 'origin', remote)
-        if code and 'already exists' not in err:
-            code, _, err = self._git('remote', 'set-url', 'origin', remote)
+        # 先 set-url 再 add：出厂 rootfs 没有 .git，首次走 add；之后每次都要能
+        # 把 origin 纠到当前镜像前缀上（用户在设置里换镜像后必须立刻生效）。
+        # Set first, add as fallback: the first run has no remote, later runs must
+        # re-point origin at the mirror prefix currently configured by the host.
+        code, _, err = self._git('remote', 'set-url', 'origin', remote)
         if code:
-            raise RuntimeError(f'git remote 配置失败: {err}')
+            code, _, err = self._git('remote', 'add', 'origin', remote)
+            if code and 'already exists' not in err:
+                raise RuntimeError(f'git remote 配置失败: {err}')
         code, _, err = self._fetch_with_backoff('--depth', '1', '--progress', 'origin',
                                                 self.updater.Branch, timeout=1800)
         if code:
