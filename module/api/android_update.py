@@ -9,6 +9,7 @@ restart_event），实例的优雅停止、依赖同步与重启由父监督器�
 导致的启动崩溃（CI 未编译完 / 断网时保持旧版本，下次再试）。
 """
 import json
+import os
 import subprocess
 import threading
 import time
@@ -71,12 +72,23 @@ class AndroidUpdateService:
         return result.returncode, result.stdout.strip(), result.stderr.strip()
 
     def upstream_head(self, force=False) -> str:
-        """ls-remote 直取上游分支头（秒级，无需本地对象）；失败返回空串。"""
+        """取热更目标提交：优先宿主渠道已发布的提交，其次 ls-remote。
+
+        为什么不能只看 ls-remote：dist 由 CI 按构建时的提交发布，上游一前进
+        就拿不到对应前端包，`dist_ready` 恒为 False，热更永远显示「暂不可
+        更新」。以渠道 latest.json 的 azurpilotCommit 为准，目标必然有包，
+        available 才可能稳定为 True；渠道读不到时才退回 ls-remote。
+
+        Returns:
+            str: 目标提交哈希；两条通道都失败时返回空串。
+        """
         cached = self._ls_remote_cache
         if not force and cached and time.monotonic() - cached[0] < _LS_REMOTE_TTL:
             return cached[1]
-        code, out, _ = self._git('ls-remote', self.updater.Repository, self.updater.Branch, timeout=30)
-        head = out.split()[0] if code == 0 and out else ''
+        head = frontend_deploy.android_channel_commit()
+        if not head:
+            code, out, _ = self._git('ls-remote', self.updater.Repository, self.updater.Branch, timeout=30)
+            head = out.split()[0] if code == 0 and out else ''
         self._ls_remote_cache = (time.monotonic(), head)
         return head
 
@@ -159,6 +171,65 @@ class AndroidUpdateService:
     def _current_target(self):
         return self._read_state().get('target')
 
+    def _git_remote(self) -> str:
+        """返回带镜像前缀的仓库地址；宿主未注入镜像时直连。
+
+        宿主通过 AZURPILOT_ANDROID_GIT_MIRROR 注入 ghproxy 形态前缀
+        （`https://ghproxy.net/`），拼接方式是前缀 + 完整 GitHub URL。
+        直连 GitHub 在移动网络下经常拉不动 1 GB 级别的仓库，注入的镜像
+        此前完全没被使用，是热更必失败的第二个原因。
+
+        Returns:
+            str: 可直接交给 git remote 的仓库地址。
+        """
+        repo = self.updater.Repository
+        mirror = os.environ.get('AZURPILOT_ANDROID_GIT_MIRROR', '').strip()
+        if not mirror.startswith(('http://', 'https://')):
+            return repo
+        mirror = mirror.rstrip('/')
+        if repo.startswith(mirror):
+            return repo
+        return f'{mirror}/{repo}'
+
+    def _fetch_with_backoff(self, *args, timeout=1800, attempts=3):
+        """git fetch 带退避重试，镜像站抖动时不至于一次判死。
+
+        Args:
+            *args: 传给 git fetch 的参数。
+            timeout (int): 单次超时秒数。
+            attempts (int): 最多尝试次数。
+
+        Returns:
+            tuple: (returncode, stdout, stderr)，最后一次尝试的结果。
+        """
+        result = (1, '', '')
+        for attempt in range(attempts):
+            result = self._git('fetch', *args, timeout=timeout)
+            if result[0] == 0:
+                return result
+            if attempt + 1 < attempts:
+                wait = 3 * (attempt + 1)
+                logger.warning(f'[Android-热更] git fetch 第 {attempt + 1} 次失败，{wait}s 后重试')
+                time.sleep(wait)
+        return result
+
+    def _stamp_commit(self, commit: str) -> None:
+        """把 azurpilot_commit 写进 BUILD_MANIFEST，其余字段原样保留。
+
+        dist 的下载地址由 BUILD_MANIFEST 的 azurpilot_commit 拼出，所以必须在
+        拉 dist 之前就把它改成目标提交。历史实现把它放在 dist 之后，导致每次
+        热更都拉旧包、按新源码指纹校验、必然失配报错。
+
+        Args:
+            commit (str): 目标提交哈希。
+        """
+        manifest = frontend_deploy.android_manifest(self.root)
+        if not manifest or manifest.get('azurpilot_commit') == commit:
+            return
+        manifest['azurpilot_commit'] = commit
+        (self.root / 'BUILD_MANIFEST').write_text(
+            json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+
     def _git_shallow_reset(self, target: str) -> None:
         """浅拉上游分支并硬重置到目标提交；rootfs 出厂无 .git，首次自动初始化。"""
         logger.hr('[Android-热更] 浅拉源码')
@@ -170,13 +241,14 @@ class AndroidUpdateService:
             code, _, err = self._git('init')
             if code:
                 raise RuntimeError(f'git init 失败: {err}')
-        code, _, err = self._git('remote', 'add', 'origin', self.updater.Repository)
+        remote = self._git_remote()
+        code, _, err = self._git('remote', 'add', 'origin', remote)
         if code and 'already exists' not in err:
-            code, _, err = self._git('remote', 'set-url', 'origin', self.updater.Repository)
+            code, _, err = self._git('remote', 'set-url', 'origin', remote)
         if code:
             raise RuntimeError(f'git remote 配置失败: {err}')
-        code, _, err = self._git('fetch', '--depth', '1', '--progress', 'origin',
-                                 self.updater.Branch, timeout=1800)
+        code, _, err = self._fetch_with_backoff('--depth', '1', '--progress', 'origin',
+                                                self.updater.Branch, timeout=1800)
         if code:
             raise RuntimeError(f'git fetch 失败: {err[-400:]}')
         code, head, err = self._git('rev-parse', 'FETCH_HEAD')
@@ -184,7 +256,7 @@ class AndroidUpdateService:
             raise RuntimeError(f'git rev-parse 失败: {err}')
         if head != target:
             # 检查后上游又前进了：按确切提交补拉一次（GitHub/gitcode 均支持按哈希取包）
-            code, _, err = self._git('fetch', '--depth', '1', 'origin', target, timeout=1800)
+            code, _, err = self._fetch_with_backoff('--depth', '1', 'origin', target, timeout=1800)
             if code:
                 raise RuntimeError(f'上游已前进且按提交拉取失败: {err[-400:]}')
             head = target
@@ -229,14 +301,18 @@ class AndroidUpdateService:
             old_commit = frontend_deploy.android_manifest(self.root).get('azurpilot_commit')
             self._phase('git')
             self._git_shallow_reset(target)
+            # 必须在拉 dist 之前落目标提交：_android_fetch_dist 按它拼地址。
+            # 顺序反了就会拉旧包、按新源码指纹校验，必然失配（原实现的 bug）。
+            self._stamp_commit(target)
             self._phase('dist')
             try:
-                frontend_deploy._android_fetch_dist(self.root / 'frontend', self.root)
+                frontend_deploy._android_fetch_dist(self.root / 'frontend', self.root, commit=target)
             except Exception:
-                # dist 拉取失败必须回滚源码：旧 dist 未动，回滚后指纹重新匹配
+                # dist 拉取失败必须回滚源码与清单：旧 dist 未动，回滚后指纹重新匹配
                 if old_commit:
                     logger.warning('[Android-热更] dist 拉取失败，回滚源码到旧版本')
                     self._git('reset', '--hard', old_commit)
+                    self._stamp_commit(old_commit)
                 raise
             self._phase('manifest')
             self._update_manifest(target)
