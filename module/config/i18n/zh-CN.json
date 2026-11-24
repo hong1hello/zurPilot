@@ -1788,6 +1788,7 @@
       "war_archives_20230223_cn": "档案 湮烬尘墟",
       "war_archives_20230525_cn": "档案 空相交汇点",
       "war_archives_20230803_cn": "档案 奏响鸢尾之歌",
+      "war_archives_20230817_cn": "档案 愚者的天平",
       "war_archives_20231026_cn": "档案 飓风与青春之泉",
       "war_archives_20240725_cn": "档案 幻梦间奏曲",
       "war_archives_20241024_cn": "档案 飓风与沉眠之海",
@@ -4779,10 +4780,6 @@
       "name": "红鲷鱼底线",
       "help": ""
     },
-    "MinBlackPorgy": {
-      "name": "黑鲷鱼底线",
-      "help": ""
-    },
     "MinYellowfinTuna": {
       "name": "黄鳍金枪鱼底线",
       "help": ""
@@ -4823,7 +4820,6 @@
       "tuna": "金枪鱼",
       "salmon": "三文鱼",
       "red_sea_bream": "红鲷鱼",
-      "black_porgy": "黑鲷鱼",
       "yellowfin_tuna": "黄鳍金枪鱼",
       "sea_cucumber": "海参"
     },
@@ -6442,6 +6438,7 @@
       "help": "",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6457,6 +6454,7 @@
       "help": "",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6472,6 +6470,7 @@
       "help": "",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6487,6 +6486,7 @@
       "help": "",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6502,6 +6502,7 @@
       "help": "",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6517,6 +6518,7 @@
       "help": "白熊饮品当前季节饮品库存不足时替换成该饮品",
       "None": "无",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -7265,7 +7267,6 @@
       "tuna": "金枪鱼",
       "salmon": "三文鱼",
       "red_sea_bream": "红鲷鱼",
-      "black_porgy": "黑鲷鱼",
       "yellowfin_tuna": "黄鳍金枪鱼",
       "sea_cucumber": "海参"
     },
@@ -7726,6 +7727,7 @@
     "MenuDevelop": {
       "HomePage": "主页",
       "Translate": "翻译",
+      "Announcement": "Gui.MenuDevelop.Announcement",
       "Update": "更新器",
       "Remote": "远程控制",
       "Setting": "设置",
@@ -7914,11 +7916,6 @@
       "GroupUpdate": "更新配置",
       "GroupMisc": "其他配置",
       "GroupRemoteAccess": "远程访问",
-      "GroupStock": "茗交所",
-      "StockUploadEnabled": "行动力上传",
-      "StockUploadEnabledHelp": "关闭后不再向茗交所上报行动力，已上报的历史保留；重新打开后会自动补足。",
-      "StockReconcileEnabled": "月度对账",
-      "StockReconcileEnabledHelp": "关闭后不再上传每月摘要做对账；行动力明细仍按上一个开关上传，重新打开后会自动补齐差异。",
       "GroupWebui": "WebUI 配置",
       "Repository": "AzurPilot 仓库地址",
       "RepositoryHelp": "用于更新和安装的 Git 仓库地址。hong1hello 修改版只从 https://github.com/hong1hello/zurPilot 更新，官方地址与国内镜像会在读取时自动归一。",

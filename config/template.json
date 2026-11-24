@@ -1296,7 +1296,7 @@
     },
     "Campaign": {
       "Name": "dynamic",
-      "Event": "campaign_main",
+      "Event": "coalition_20261124",
       "Mode": "normal",
       "UseClearMode": true,
       "UseFleetLock": true,
@@ -1361,7 +1361,7 @@
     },
     "Campaign": {
       "Name": "dynamic",
-      "Event": "campaign_main",
+      "Event": "coalition_20261124",
       "Mode": "normal",
       "UseClearMode": true,
       "UseFleetLock": true,
@@ -2089,7 +2089,7 @@
     },
     "Campaign": {
       "Name": "sp",
-      "Event": "campaign_main",
+      "Event": "coalition_20261124",
       "Mode": "normal",
       "UseClearMode": true,
       "UseFleetLock": true,

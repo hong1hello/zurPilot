@@ -1642,12 +1642,12 @@
       "coalition_20260122": "光影風尚-拍攝進行時",
       "coalition_20260723": "怪談紀實",
       "coalition_20261124": "The Transfer Student at Veritas Academy",
-      "event_20200227_cn": "北境序曲",
+      "event_20200227_cn": "Northern Overture",
       "event_20200312_cn": "斯圖爾特的硝煙",
-      "event_20200326_cn": "微層混合",
-      "event_20200423_cn": "蒼紅的迴響",
-      "event_20200507_cn": "夜幕下的歸途",
-      "event_20200521_cn": "穹頂下的聖詠曲",
+      "event_20200326_cn": "Microlayer Medley",
+      "event_20200423_cn": "Crimson Echoes Rerun",
+      "event_20200507_cn": "The Way Home in the Night",
+      "event_20200521_cn": "穹顶下的圣咏曲",
       "event_20200521_en": "Iris of Light and Dark Rerun",
       "event_20200603_cn": "復刻峽灣間的反擊",
       "event_20200603_en": "Prelude under the Moon Rerun",
@@ -1701,7 +1701,7 @@
       "event_20230803_cn": "奏響鳶尾之歌",
       "event_20230817_cn": "愚者的天平",
       "event_20230914_cn": "須臾望月抄",
-      "event_20231026_cn": "颶風與青春之泉",
+      "event_20231026_cn": "飓風與青春之泉",
       "event_20231123_cn": "蒼閃忍法帖",
       "event_20231221_cn": "星海逐光",
       "event_20240229_cn": "雪境迷蹤",
@@ -1726,7 +1726,7 @@
       "event_20260326_cn": "漫遊者招募計劃",
       "event_20260417_cn": "假日航線閃耀海濱",
       "event_20260520_cn": "聖印前的同盟",
-      "event_20260625_cn": "美夢巡演奇妙夜",
+      "event_20260625_cn": "美夢巡演奇秒夜",
       "event_20260813_cn": "沉溺於星光之城",
       "event_20260908_cn": "幽影迷城",
       "event_20261022_cn": "颶風與霧靄迴廊",
@@ -1788,6 +1788,7 @@
       "war_archives_20230223_cn": "檔案 湮燼塵墟",
       "war_archives_20230525_cn": "檔案 空相交會點",
       "war_archives_20230803_cn": "檔案 奏響鳶尾之歌",
+      "war_archives_20230817_cn": "檔案 愚者的天平",
       "war_archives_20231026_cn": "檔案 飓風與青春之泉",
       "war_archives_20240725_cn": "檔案 幻夢間奏曲",
       "war_archives_20241024_cn": "檔案 颶風與沉眠之海",
@@ -4066,7 +4067,7 @@
     },
     "Filter": {
       "name": "商店過濾器",
-      "help": "支援 戰役訊息記錄儀(LoggerUnlock), 隱秘海域資訊紀錄儀(HiddenZoneDataLogger)\n參考文件 https://github.com/LmeSzinc/AzurLaneAutoScript/wiki/reward_shop_filter_string 你可以自行設定：LoggerUnlock > HiddenZoneDataLogger > LoggerAbyssal > LoggerObscure > Book > Coin > Fragment 來購買戰役訊息記錄儀和隱秘海域資訊紀錄儀。"
+      "help": "支援 戰役訊息記錄儀(LoggerUnlock), 隱秘海域資訊紀錄儀(HiddenZoneDataLogger)\n參考檔案 https://github.com/LmeSzinc/AzurLaneAutoScript/wiki/reward_shop_filter_string 你可以自行設定：LoggerUnlock > HiddenZoneDataLogger > LoggerAbyssal > LoggerObscure > Book > Coin > Fragment 來購買戰役訊息記錄儀和隱秘海域資訊紀錄儀。"
     }
   },
   "OpsiDaily": {
@@ -4779,10 +4780,6 @@
       "name": "紅鯛魚底線",
       "help": ""
     },
-    "MinBlackPorgy": {
-      "name": "黑鯛魚底線",
-      "help": ""
-    },
     "MinYellowfinTuna": {
       "name": "黃鰭鮪魚底線",
       "help": ""
@@ -4823,7 +4820,6 @@
       "tuna": "金槍魚",
       "salmon": "三文魚",
       "red_sea_bream": "紅鯛魚",
-      "black_porgy": "黑鯛魚",
       "yellowfin_tuna": "黃鰭金槍魚",
       "sea_cucumber": "海參"
     },
@@ -6442,6 +6438,7 @@
       "help": "",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -6457,6 +6454,7 @@
       "help": "",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -6472,6 +6470,7 @@
       "help": "",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -6487,6 +6486,7 @@
       "help": "",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -6502,6 +6502,7 @@
       "help": "",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -6517,6 +6518,7 @@
       "help": "白熊飲品目前季節飲品庫存不足時替換成該飲品",
       "None": "無",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "banana_mango",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韻",
@@ -7265,7 +7267,6 @@
       "tuna": "金槍魚",
       "salmon": "三文魚",
       "red_sea_bream": "紅鯛魚",
-      "black_porgy": "黑鯛魚",
       "yellowfin_tuna": "黃鰭金槍魚",
       "sea_cucumber": "海參"
     },
@@ -7726,6 +7727,7 @@
     "MenuDevelop": {
       "HomePage": "主頁",
       "Translate": "翻譯",
+      "Announcement": "Gui.MenuDevelop.Announcement",
       "Update": "更新器",
       "Remote": "遠端控制",
       "Setting": "設定",
@@ -7914,11 +7916,6 @@
       "GroupUpdate": "更新設定",
       "GroupMisc": "其他設定",
       "GroupRemoteAccess": "遠端存取",
-      "GroupStock": "茗交所",
-      "StockUploadEnabled": "行動力上傳",
-      "StockUploadEnabledHelp": "關閉後不再向茗交所上報行動力，已上報的歷史保留；重新開啟後會自動補足。",
-      "StockReconcileEnabled": "月度對帳",
-      "StockReconcileEnabledHelp": "關閉後不再上傳每月摘要做對帳；行動力明細仍按上一個開關上傳，重新開啟後會自動補齊差異。",
       "GroupWebui": "WebUI 設定",
       "Repository": "AzurPilot 倉庫地址",
       "RepositoryHelp": "用於更新和安裝的 Git 倉庫地址。hong1hello 修改版只從 https://github.com/hong1hello/zurPilot 更新，官方位址與國內鏡像會在讀取時自動歸一。",
