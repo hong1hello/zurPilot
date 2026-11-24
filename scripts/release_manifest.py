@@ -42,27 +42,44 @@ SIGNATURE_NAME = 'release.sig'
 # 只放"确定不含合法文件"的目录名。这里按名字匹配，不区分层级，
 # 所以像 dist 这种同名歧义的绝不能进来——frontend/dist 是必须签名的前端产物，
 # 而根目录的 dist/ 是 Python 构建残留。歧义交给 is_signable() 的白名单判定。
-EXCLUDE_DIRS = frozenset({
-    'runtime', 'log', 'cache', 'screenshots', 'node_modules', '.git',
-    '__pycache__', '.ruff_cache', '.uv-cache', 'config',
-    # 虚拟环境：在仓库根直接签名时会撞上，2 万多个文件，必须排除
-    '.venv', 'venv', 'env', '.tox',
-    # 以下既不进发布包、也不该参与签名，否则清单会随着开发机的本地状态变化：
+# 只在**根层**排除的目录名。
+#
+# 这里每一个都是"根目录下是别的东西、子目录下是代码"的同名歧义：
+#   config/         用户配置          module/config/     args.json / i18n / config.py
+#   runtime/        Python 运行时     module/runtime/    updater.py / setting.py / 进程管理
+#   log/ cache/     运行痕迹          module/log_res / module/cache 之类
+#   tests/ docs/    开发资料
+# 一律按名字全局剪枝的话，模块源码会跟着被剪掉——踩过两次（config、runtime），
+# 每次都是整块核心代码失去签名保护。
+ROOT_ONLY_EXCLUDES = frozenset({
+    'config', 'runtime', 'log', 'cache', 'screenshots',
     'tests', 'docs', 'dev_tools', '.github', '.pytest_cache',
+    '.venv', 'venv', 'env', '.tox',
     # 事务更新的工作目录（缓存裸仓库、ready-* 候选版、journal）
     '.azurpilot',
-    # 回滚留下的崩溃现场：它是用户本地的运行痕迹，不同机器内容不同
+    # 回滚留下的崩溃现场：用户本地的运行痕迹，不同机器内容不同
     'config-after-failed-update',
     # 历史数据备份目录
     'AzurPilot_Data_Backup',
 })
-EXCLUDE_NAMES = frozenset({
+
+# 任意层级都排除的目录名。这些名字不会有"子目录里是代码"的情况。
+ANY_LEVEL_EXCLUDES = frozenset({
+    'node_modules', '.git', '__pycache__', '.ruff_cache', '.uv-cache',
+})
+
+# 兼容旧名：外部只读它来判断"某目录是否被排除"，取并集语义。
+EXCLUDE_DIRS = ROOT_ONLY_EXCLUDES | ANY_LEVEL_EXCLUDES
+
+# 只在根层排除的文件名：仓库元文件与打包产物。
+# deploy/docker/Dockerfile 这类子目录同名文件必须保留（它会随更新走）。
+ROOT_ONLY_FILES = frozenset({
     MANIFEST_NAME, SIGNATURE_NAME, 'probe-summary.json',
     'README.txt', 'AzurPilot.bat', 'PROBE-FAILED.txt',
-    # 仓库元文件：不随包分发，也不该进签名
     '.gitignore', '.gitattributes', '.gitmodules', '.dockerignore',
     'AGENTS.md', 'CLAUDE.md', 'Makefile', 'Dockerfile', 'docker-compose.yml',
 })
+EXCLUDE_NAMES = ROOT_ONLY_FILES
 
 # 参与签名的顶层目录与根文件。
 #
@@ -196,9 +213,23 @@ def iter_files(root):
     for current, dirs, names in os.walk(root):
         # 原地过滤，walk 就不会进这些目录，省掉大量 stat。
         # 真正的判定在下面的 is_signable()，这里只是剪枝加速。
-        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+        #
+        # 剪枝按目录名匹配，遇到同名歧义会误杀：config/ 与 module/config/、
+        # runtime/ 与 module/runtime/ 都是"根目录是资源、子目录是代码"。
+        # 所以根层专属的排除只作用于根层，其余层级交给 is_signable() 判定。
+        at_root = Path(current) == root
+        keep = []
+        for name in dirs:
+            if name in ANY_LEVEL_EXCLUDES:
+                continue
+            if at_root and name in ROOT_ONLY_EXCLUDES:
+                continue
+            keep.append(name)
+        dirs[:] = keep
         for name in names:
-            if name in EXCLUDE_NAMES:
+            if at_root and name in ROOT_ONLY_FILES:
+                continue
+            if name in (MANIFEST_NAME, SIGNATURE_NAME):
                 continue
             path = Path(current) / name
             if path.is_symlink():

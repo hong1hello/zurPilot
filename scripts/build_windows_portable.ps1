@@ -329,6 +329,21 @@ if (Test-Path -LiteralPath $ProbeSummary) { Remove-Item -LiteralPath $ProbeSumma
 $ProbeMarker = Join-Path $Stage "PROBE-FAILED.txt"
 if (Test-Path -LiteralPath $ProbeMarker) { Remove-Item -LiteralPath $ProbeMarker -Force }
 
+# 写入初始安装状态（RECEIPT + FILES）。
+#
+# 缺了这两份文件，事务更新就是残的：
+# - 没有 RECEIPT：用户装好后 check() 把本地当成"全 0"，永远提示有更新
+# - 没有 FILES：apply() 拿不到基线，每个待更新文件都被判成"本机修改"，
+#   更新永远装不上
+# 必须在签名之前跑（FILES 的哈希要覆盖最终形态），但这两份文件本身不签名。
+Write-Step "写入初始安装状态"
+$InitRevision = (& git -C $Repo rev-parse HEAD).Trim()
+if ($InitRevision.Length -ne 40) { throw "取不到 HEAD 提交哈希: '$InitRevision'" }
+$InitPython = Join-Path $Repo ".venv\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $InitPython)) { $InitPython = "python" }
+& $InitPython (Join-Path $Repo "scripts\init_install_state.py") --root $Stage --revision $InitRevision
+if ($LASTEXITCODE -ne 0) { throw "初始安装状态写入失败 ($LASTEXITCODE)" }
+
 # 签名放在清理之后：清单必须描述最终形态的包，早签会把探活残留算进哈希。
 if ($SignKey) {
     Write-Step "签名发布清单"

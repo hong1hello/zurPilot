@@ -73,10 +73,28 @@ def test_config_directory_is_neither_signed_nor_updated():
     但 files.json 里没有模板，apply 逐文件比对时就判定"本机修改"而中止，
     结果是可更新却永远更新不了。两条规则必须同时收口。
     """
-    assert 'config' in manifest.EXCLUDE_DIRS
+    # config 只能在根层被排除。放进 ANY_LEVEL_EXCLUDES 会按名字剪枝，
+    # 把 module/config 一起剪掉，args.json 与 i18n 全部失去签名保护。
+    assert 'config' in manifest.ROOT_ONLY_EXCLUDES
+    assert 'config' not in manifest.ANY_LEVEL_EXCLUDES
     assert manifest.is_signable('config/template.json') is False
+    assert manifest.is_signable('module/config/argument/args.json') is True
     assert ind.app_path('config/template.json') is False
     assert ind.app_path('config/deploy.template.yaml') is False
+
+
+@pytest.mark.parametrize('ambiguous', ['config', 'runtime'])
+def test_ambiguous_directory_names_are_root_only(ambiguous):
+    """同名歧义目录只能根层剪。
+
+    config/ 与 module/config/、runtime/ 与 module/runtime/ 都踩过：
+    全局按名字剪枝会让整块核心代码失去签名保护
+    （args.json / updater.py / setting.py 都在这两个目录里）。
+    """
+    assert ambiguous in manifest.ROOT_ONLY_EXCLUDES
+    assert ambiguous not in manifest.ANY_LEVEL_EXCLUDES
+    assert manifest.is_signable(f'module/{ambiguous}/probe.py') is True
+    assert manifest.is_signable(f'{ambiguous}/probe.bin') is False
 
 
 def test_signable_dirs_match_updatable_dirs():
@@ -147,3 +165,31 @@ def test_frontend_dist_survives_pruning():
     }
     assert signed, 'frontend/dist 下一个文件都没被签名，剪枝把它错杀了'
     assert any(name.endswith('index.html') for name in signed), 'index.html 必须被签名'
+
+def test_module_config_is_signed():
+    """module/config/ 是核心代码，必须签名。
+
+    踩过两次同类坑：剪枝按目录名匹配，config 这个同名歧义把
+    module/config 整个剪掉了，args.json / i18n / config.py 全都不签名，
+    被改了也校验不出来。现在只有根层 config 被剪。
+    """
+    assert manifest.is_signable('module/config/argument/args.json') is True
+    assert manifest.is_signable('module/config/config.py') is True
+    assert manifest.is_signable('module/config/i18n/zh-CN.json') is True
+    # 根 config 仍然不签
+    assert manifest.is_signable('config/ap.json') is False
+
+
+def test_signed_set_covers_module_config():
+    """真实目录树上，module/config 下的文件确实进了签名。"""
+    config_dir = REPO / 'module' / 'config'
+    if not config_dir.is_dir():
+        pytest.skip('仓库里没有 module/config')
+
+    signed = {
+        p.relative_to(REPO).as_posix()
+        for p in manifest.iter_files(REPO)
+        if p.relative_to(REPO).as_posix().startswith('module/config/')
+    }
+    assert signed, 'module/config 一个文件都没被签名，剪枝把它错杀了'
+    assert 'module/config/argument/args.json' in signed
