@@ -203,6 +203,30 @@ page_coalition = Page(HORROR_COALITION_CHECK)
 page_coalition.link(button=GOTO_MAIN, destination=page_main)
 page_coalition.link(button=BACK_ARROW, destination=page_campaign_menu)
 page_campaign_menu.link(button=CAMPAIGN_MENU_GOTO_EVENT, destination=page_coalition)
+
+# 真理学院的转校生（coalition_20261124）用的是独立入口与返回按钮，
+# 不能和恐怖故事共用 page_coalition，否则页面识别一直失败。
+page_coalition_veritas = Page(VERITAS_COALITION_CHECK)
+page_coalition_veritas.link(button=VERITAS_HOME, destination=page_main)
+page_coalition_veritas.link(button=VERITAS_BACK, destination=page_campaign_menu)
+page_campaign_menu.link(button=CAMPAIGN_MENU_GOTO_EVENT, destination=page_coalition_veritas)
+
+
+def get_coalition_page(event):
+    """按当前活动选择联合出击页面。
+
+    放在函数里而不是在调用点写 if/else：页面对象在模块导入期构建，
+    每多一个活动就多一处分支，容易漏改。集中在这里，新增活动只加一行。
+
+    Args:
+        event (str): 活动名，例如 'coalition_20261124'。
+
+    Returns:
+        Page: 该活动对应的页面对象。
+    """
+    return page_coalition_veritas if event == 'coalition_20261124' else page_coalition
+
+
 # 小学院
 # page_coalition_menu = Page(COALITION_ACADEMY_MAIN_CHECK)
 # page_coalition_menu.link(button=COALITION_ACADEMY_HOME, destination=page_main)
