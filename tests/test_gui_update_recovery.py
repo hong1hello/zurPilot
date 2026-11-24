@@ -1,7 +1,15 @@
-"""启动前回滚（gui._recover_pending_update）的回归测试。
+"""启动期更新生命周期（gui 侧）的回归测试。
 
-这条路径平时不触发，一旦触发就是用户"每次启动都跑在坏版本上"的救命逻辑，
-所以每个分支都要钉住，包括「模块不存在」「竞态消失」「重启失败」。
+这里有两条路径，方向相反，必须都钉住：
+
+1. `_recover_pending_update()` —— 启动最前面判断要不要回滚
+   刚装完的首次启动必须放行，否则等于装完立刻自己撤掉；
+   第二次启动仍是 trial，说明上次没跑到确认点，才回滚。
+
+2. `_confirm_pending_update()` —— HTTP 真的监听成功后确认
+   只有这一步才清掉回滚材料。
+
+两条一起才构成完整事务：装 → 重启 → 能跑起来 → 确认，跑不起来 → 下轮回滚。
 
 用 monkeypatch 替换 deploy.independent 的成员，不真的动文件系统，
 也不真的启动 WebUI。
@@ -18,13 +26,6 @@ import gui
 
 
 @pytest.fixture()
-def no_journal(monkeypatch):
-    """默认场景：没有待恢复事务。"""
-    monkeypatch.setattr(independent, 'trial_pending', lambda: False)
-    monkeypatch.setattr(independent, 'recover', lambda: pytest.fail('不该调用 recover'))
-
-
-@pytest.fixture()
 def restart_spy(monkeypatch):
     """记录是否触发了重启。"""
     calls = []
@@ -32,29 +33,53 @@ def restart_spy(monkeypatch):
     return calls
 
 
-def test_no_journal_starts_normally(no_journal, restart_spy):
-    """没有待恢复事务时返回 None，且不重启。"""
+def test_no_journal_starts_normally(monkeypatch, restart_spy):
+    """没有待确认事务时返回 None，且不重启。"""
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: None)
+    monkeypatch.setattr(independent, 'recover', lambda root: pytest.fail('不该回滚'))
+
     assert gui._recover_pending_update() is None
     assert restart_spy == []
 
 
-def test_recovers_then_restarts(monkeypatch, restart_spy):
-    """有事务则回滚，回滚成功后重启以加载旧版本。"""
-    monkeypatch.setattr(independent, 'trial_pending', lambda: True)
-    monkeypatch.setattr(independent, 'recover', lambda: True)
+def test_first_attempt_is_allowed_through(monkeypatch, restart_spy):
+    """首次启动新版本要放行——这是刚装完的那一次。
 
-    result = gui._recover_pending_update()
+    这里是最容易写错的地方：如果看到 trial 就回滚，用户点完更新、
+    进程一重启就把刚装的东西撤了，永远更新不了。
+    """
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: 1)
+    monkeypatch.setattr(independent, 'recover', lambda: pytest.fail('首次尝试不该回滚'))
 
-    assert result == gui.EXIT_SUCCESS
-    assert restart_spy == [1], '回滚成功后必须重启'
+    assert gui._recover_pending_update() is None
+    assert restart_spy == []
+
+
+def test_second_attempt_rolls_back(monkeypatch, restart_spy):
+    """第二次仍是 trial：上次没能跑到确认点，回滚。"""
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: 2)
+    monkeypatch.setattr(independent, 'recover', lambda root: True)
+
+    assert gui._recover_pending_update() == gui.EXIT_SUCCESS
+    assert restart_spy == [1], '回滚后必须重启才能加载旧代码'
+
+
+@pytest.mark.parametrize('attempts', [3, 5])
+def test_repeated_failures_keep_rolling_back(monkeypatch, restart_spy, attempts):
+    """连续失败多轮仍然回滚，不能因为计数变大就放行。"""
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: attempts)
+    monkeypatch.setattr(independent, 'recover', lambda root: True)
+
+    assert gui._recover_pending_update() == gui.EXIT_SUCCESS
+    assert restart_spy == [1]
 
 
 def test_recover_exception_aborts_startup(monkeypatch, restart_spy):
-    """回滚本身失败时不能继续启动，否则跑在半更新版本上。"""
-    def boom():
+    """回滚本身失败时中止启动，否则会跑在半更新版本上。"""
+    def boom(root):
         raise OSError('备份副本缺失')
 
-    monkeypatch.setattr(independent, 'trial_pending', lambda: True)
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: 2)
     monkeypatch.setattr(independent, 'recover', boom)
 
     assert gui._recover_pending_update() == gui.EXIT_UPDATE_RECOVERY_FAILURE
@@ -62,12 +87,12 @@ def test_recover_exception_aborts_startup(monkeypatch, restart_spy):
 
 
 def test_journal_unreadable_aborts_startup(monkeypatch, restart_spy):
-    """连 journal 都读不出来时，无法判断是否需要回滚，只能中止。"""
-    def boom():
+    """连 journal 都读不出来时无法判断，只能中止。"""
+    def boom(root):
         raise ValueError('更新恢复记录无效')
 
-    monkeypatch.setattr(independent, 'trial_pending', boom)
-    monkeypatch.setattr(independent, 'recover', lambda: pytest.fail('不该调用 recover'))
+    monkeypatch.setattr(independent, 'bump_trial_attempt', boom)
+    monkeypatch.setattr(independent, 'recover', lambda root: pytest.fail('不该回滚'))
 
     assert gui._recover_pending_update() == gui.EXIT_UPDATE_RECOVERY_FAILURE
     assert restart_spy == []
@@ -75,8 +100,8 @@ def test_journal_unreadable_aborts_startup(monkeypatch, restart_spy):
 
 def test_race_where_journal_disappears(monkeypatch, restart_spy):
     """两次检查之间 journal 被别的进程清掉：继续启动，不重启。"""
-    monkeypatch.setattr(independent, 'trial_pending', lambda: True)
-    monkeypatch.setattr(independent, 'recover', lambda: False)
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: 2)
+    monkeypatch.setattr(independent, 'recover', lambda root: False)
 
     assert gui._recover_pending_update() is None
     assert restart_spy == [], '没真的回滚就不该重启'
@@ -87,19 +112,15 @@ def test_restart_failure_is_reported(monkeypatch):
     def boom():
         raise OSError('execv not supported')
 
-    monkeypatch.setattr(independent, 'trial_pending', lambda: True)
-    monkeypatch.setattr(independent, 'recover', lambda: True)
+    monkeypatch.setattr(independent, 'bump_trial_attempt', lambda root: 2)
+    monkeypatch.setattr(independent, 'recover', lambda root: True)
     monkeypatch.setattr(gui, '_restart_self', boom)
 
     assert gui._recover_pending_update() == gui.EXIT_STARTUP_FAILURE
 
 
 def test_missing_module_does_not_block_startup(monkeypatch):
-    """精简部署没有 deploy.independent 时，启动不能被拖住。
-
-    用 __import__ 打桩模拟 ImportError：真把模块从 sys.modules 摘掉
-    会连带污染其它测试。
-    """
+    """精简部署没有 deploy.independent 时，启动不能被拖住。"""
     import builtins
 
     real_import = builtins.__import__
@@ -114,8 +135,41 @@ def test_missing_module_does_not_block_startup(monkeypatch):
     assert gui._recover_pending_update() is None
 
 
+# ── 确认路径 ────────────────────────────────────────────────────────────────
+
+def test_confirm_skipped_without_journal(monkeypatch):
+    """没有 journal 时确认是空操作。"""
+    monkeypatch.setattr(independent, 'trial_pending', lambda root: False)
+    monkeypatch.setattr(independent, 'confirm', lambda root: pytest.fail('不该确认'))
+
+    gui._confirm_pending_update()  # 不抛
+
+
+def test_confirm_runs_when_trial_pending(monkeypatch):
+    """有 journal 时调 confirm 清掉回滚材料。"""
+    called = []
+    monkeypatch.setattr(independent, 'trial_pending', lambda root: True)
+    monkeypatch.setattr(independent, 'confirm', lambda root: called.append(1) or True)
+
+    gui._confirm_pending_update()
+    assert called == [1]
+
+
+def test_confirm_failure_does_not_raise(monkeypatch):
+    """确认失败只记日志：最坏是下次启动多回滚一次，不该影响当前服务。"""
+    def boom(root):
+        raise OSError('目录被占用')
+
+    monkeypatch.setattr(independent, 'trial_pending', lambda root: True)
+    monkeypatch.setattr(independent, 'confirm', boom)
+
+    gui._confirm_pending_update()  # 不抛
+
+
+# ── 退出码与重启参数 ────────────────────────────────────────────────────────
+
 def test_recovery_exit_code_is_distinct():
-    """新退出码不能与既有码段冲突，启动器要靠它区分展示。"""
+    """新退出码不能与既有码冲突，启动器要靠它区分展示。"""
     existing = {
         gui.EXIT_SUCCESS, gui.EXIT_STARTUP_FAILURE, gui.EXIT_WORKER_CLEANUP_FAILURE,
         gui.EXIT_DEPENDENCY_SYNC_FAILURE, gui.EXIT_FRONTEND_BUILD_FAILURE,
@@ -124,7 +178,7 @@ def test_recovery_exit_code_is_distinct():
         gui.EXIT_IPC_FAILURE,
     }
     assert gui.EXIT_UPDATE_RECOVERY_FAILURE not in existing
-    assert 0 < gui.EXIT_UPDATE_RECOVERY_FAILURE < 128, '退出码要落在常规区间以便 bat 读'
+    assert 0 < gui.EXIT_UPDATE_RECOVERY_FAILURE < 128
 
 
 def test_restart_self_uses_current_argv(monkeypatch):

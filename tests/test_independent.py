@@ -29,8 +29,6 @@ from deploy import independent as ind
     'gui.py',
     'deploy/independent.py',
     'assets/cn/ui/shop.png',
-    'config/template.json',
-    'config/deploy.template.yaml',
 ])
 def test_app_path_accepts_legitimate(name):
     assert ind.app_path(name) is True
@@ -53,11 +51,17 @@ def test_app_path_rejects_dangerous(name):
     assert ind.app_path(name) is False
 
 
-def test_app_path_restricts_config_to_templates():
-    """config 下只放行模板，用户配置不能被更新覆盖。"""
-    assert ind.app_path('config/template.json') is True
-    assert ind.app_path('config/ap.json') is False
-    assert ind.app_path('config/deploy.yaml') is False
+def test_app_path_rejects_entire_config_directory():
+    """config 下一个文件都不放行，模板也不例外。
+
+    曾经放行过 template.json / deploy.template.yaml，但 config 整个目录在
+    签名范围外（用户配置不该被校验），files.json 里就没有这两个模板，
+    apply 逐文件比对时会判定"本机修改"而中止整个更新——典型的两条规则打架。
+    模板由 config_update() 按 schema 补齐，不需要走更新包。
+    """
+    for name in ('config/template.json', 'config/deploy.template.yaml',
+                 'config/ap.json', 'config/deploy.yaml', 'config/storage/x.db'):
+        assert ind.app_path(name) is False, f'{name} 不该可更新'
 
 
 def test_app_path_allows_frontend_dist_only():
@@ -439,3 +443,65 @@ def test_check_target_rejects_symlink(tmp_path):
 
     with pytest.raises(ValueError, match='链接'):
         ind.check_target(root, 'module/linked.py')
+
+
+# ── 试运行计数 ──────────────────────────────────────────────────────────────
+# 这一组决定「装完重启后要不要立刻回滚」。语义写错会二选一地坏掉：
+# 看到 trial 就回滚 -> 用户永远更新不了；从不回滚 -> 装坏了就永久变砖。
+
+def test_bump_returns_none_without_journal(tmp_path):
+    """没有事务时返回 None。"""
+    root = _make_app(tmp_path)
+    assert ind.bump_trial_attempt(root) is None
+
+
+def test_bump_increments_from_zero(tmp_path):
+    """apply 写的 attempts 是 0，第一次启动取到 1。"""
+    root = _make_app(tmp_path)
+    journal = root / ind.WORK / 'transaction.json'
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    ind.write_json(journal, {'ready': 'ready-a', 'changed': [], 'phase': 'trial', 'attempts': 0})
+
+    assert ind.bump_trial_attempt(root) == 1
+    assert ind.bump_trial_attempt(root) == 2
+    assert ind.bump_trial_attempt(root) == 3
+
+    record = json.loads(journal.read_text(encoding='utf-8'))
+    assert record['attempts'] == 3
+    assert record['phase'] == 'trial'
+
+
+def test_bump_ignores_installing_phase(tmp_path):
+    """installing 说明上次装到一半被打断，不该当成试运行，交给 recover。"""
+    root = _make_app(tmp_path)
+    journal = root / ind.WORK / 'transaction.json'
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    ind.write_json(journal, {'ready': 'ready-a', 'changed': [], 'phase': 'installing'})
+
+    assert ind.bump_trial_attempt(root) is None
+    # 不能把计数写进去
+    assert json.loads(journal.read_text(encoding='utf-8'))['phase'] == 'installing'
+
+
+def test_bump_survives_missing_attempts_field(tmp_path):
+    """老 journal 没有 attempts 字段时按 0 处理，不能崩。"""
+    root = _make_app(tmp_path)
+    journal = root / ind.WORK / 'transaction.json'
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    ind.write_json(journal, {'ready': 'ready-a', 'changed': [], 'phase': 'trial'})
+
+    assert ind.bump_trial_attempt(root) == 1
+
+
+def test_apply_writes_attempts_zero(tmp_path, monkeypatch):
+    """apply 落 journal 时必须写 attempts=0，否则第一次启动就被当成失败。"""
+    root = _make_app(tmp_path)
+    _install_baseline(root)
+    ready, _ = _make_ready(root, {'module/core.py': 'CORE = 2\n'})
+    monkeypatch.setattr(ind, 'update_source', lambda r: ('https://example.com/repo', 'master'))
+
+    ind.apply(ready, root)
+
+    record = json.loads((root / ind.WORK / 'transaction.json').read_text(encoding='utf-8'))
+    assert record['phase'] == 'trial'
+    assert record['attempts'] == 0, '首次启动前的计数必须是 0'

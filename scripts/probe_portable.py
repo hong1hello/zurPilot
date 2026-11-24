@@ -15,6 +15,7 @@
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -45,6 +46,9 @@ def free_port():
         return sock.getsockname()[1]
 
 
+PROBE_CONFIG = '.probe-config'
+
+
 def probe_env(root):
     """给子进程准备一份干净的环境。
 
@@ -59,6 +63,15 @@ def probe_env(root):
     env['PYTHONDONTWRITEBYTECODE'] = '1'
     # 让子进程知道自己是探活模式，业务侧可以据此跳过副作用。
     env['AZURPILOT_PROBE'] = '1'
+    # 指向一次性配置目录，不要碰 root/config。
+    #
+    # 两个理由：
+    # 1. 探活可能发生在 WebUI 已经运行的时候（用户点"检查更新"再点"应用"）。
+    #    共用 root/config 会让两边抢同一个 SQLite 的总库初始化锁，
+    #    initialize() 会一直等，探活只能耗到超时被误判成"候选版起不来"。
+    # 2. 探活要验证的是"应用能起来 + dist 能挂上"，与用户的真实配置无关，
+    #    空库走首次启动路径反而更干净。
+    env['AZURPILOT_CONFIG_DIR'] = str(Path(root) / PROBE_CONFIG)
     runtime = str(Path(root) / 'runtime')
     # cv2 / onnxruntime 的 .pyd 会在自己目录和 PATH 上找 DLL。
     env['PATH'] = os.pathsep.join([runtime, os.path.join(runtime, 'Library', 'bin'),
@@ -195,6 +208,8 @@ def probe(root, timeout=40.0):
             except subprocess.TimeoutExpired:
                 print('[probe] 子进程未能回收', file=sys.stderr)
         handle.close()
+        # 一次性配置目录用完就删，别在包里留垃圾，也别让它被签名清单扫到
+        shutil.rmtree(Path(root) / PROBE_CONFIG, ignore_errors=True)
 
 
 def dump_summary(root):

@@ -66,14 +66,17 @@ def test_scripts_is_updatable():
     assert ind.app_path('scripts/probe_portable.py') is True
 
 
-def test_config_templates_updatable_but_not_signed():
-    """模板可更新但不签名——它是唯一被允许的不对称。
+def test_config_directory_is_neither_signed_nor_updated():
+    """config 整目录在两条规则里都必须被排除。
 
-    原因：config 整个目录排除在签名外（用户配置不该被校验），
-    但模板由代码生成，随版本更新是必要的。
+    这是踩过坑的地方：曾经让模板"可更新但不签名"，想着模板要跟版本走。
+    但 files.json 里没有模板，apply 逐文件比对时就判定"本机修改"而中止，
+    结果是可更新却永远更新不了。两条规则必须同时收口。
     """
-    assert ind.app_path('config/template.json') is True
     assert 'config' in manifest.EXCLUDE_DIRS
+    assert manifest.is_signable('config/template.json') is False
+    assert ind.app_path('config/template.json') is False
+    assert ind.app_path('config/deploy.template.yaml') is False
 
 
 def test_signable_dirs_match_updatable_dirs():
@@ -106,9 +109,6 @@ def test_is_signable_matches_app_path_for_sample_paths():
     for name in samples:
         signed = manifest.is_signable(name)
         updatable = bool(ind.app_path(name) or ind.app_path(name, frontend=True))
-        # config 模板是唯一被允许的不对称：可更新但不签名
-        if name == 'config/template.json':
-            continue
         if signed != updatable:
             mismatched.append((name, signed, updatable))
     assert not mismatched, f'签名与更新判定不一致: {mismatched}'

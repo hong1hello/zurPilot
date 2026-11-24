@@ -33,6 +33,9 @@ class UpdateService:
         self.lock = threading.Lock()
         self.operation = None
         self.error = ''
+        # 便携模式下 check() 的结果缓存。status() 必须快返回，不能每次都联网，
+        # 所以由 start('fetch') 在后台线程里填这个字段。
+        self._offer = None
 
     @property
     def updater(self):
@@ -54,6 +57,31 @@ class UpdateService:
             bool: 若环境变量 AZURPILOT_ANDROID 为 '1' 返回 True，否则返回 False。
         """
         return os.environ.get('AZURPILOT_ANDROID') == '1'
+
+    @property
+    def portable(self) -> bool:
+        """检查当前是否为便携包（自带独立运行时）。
+
+        判定依据是 runtime/python.exe 存在。开发环境的仓库里没有这个目录，
+        便携包里一定有——它由打包脚本组装，也是 deploy.independent 一切
+        文件操作的宿主。
+
+        Returns:
+            bool: 便携包返回 True。
+        """
+        return (self.root / 'runtime' / 'python.exe').is_file()
+
+    def _portable(self):
+        """按需导入事务更新模块。
+
+        放在方法里 import：开发环境（没有 runtime/）下这个模块用不上，
+        顶层 import 会把 deploy.utils / uv 之类的依赖也拉进来。
+
+        Returns:
+            module: deploy.independent。
+        """
+        from deploy import independent
+        return independent
 
     def android_manifest(self) -> dict:
         """读取 Android 构建清单文件。
@@ -137,6 +165,64 @@ class UpdateService:
         upstream = self.git('rev-parse', '--verify', f'refs/remotes/origin/{self.updater.Branch}', optional=True)
         return local, upstream
 
+    def portable_status(self) -> dict:
+        """便携包模式下的更新状态。
+
+        与 Git 模式的区别：
+        - 本地版本取 RECEIPT 里记录的 revision，而不是 rev-parse HEAD
+          （便携包不带 .git，代码是解压出来的）
+        - 上游版本取上一次 check() 的缓存，status() 本身不联网
+        - canApply 只要求有 offer 且不忙；便携模式的重启走 supervisor 事件
+
+        Returns:
+            dict: 与 Git 模式字段一致的状体字典。
+        """
+        independent = self._portable()
+        receipt_path = self.root / independent.RECEIPT
+        local = None
+        if receipt_path.is_file():
+            try:
+                local = independent.read_json(receipt_path).get('revision') or None
+            except (OSError, ValueError):
+                local = None
+
+        offer = self._offer
+        upstream = offer['revision'] if offer else None
+        available = bool(offer and upstream and upstream != local)
+
+        # journal 还在说明上一轮装了没确认，此时不允许再装第二次
+        try:
+            pending = independent.trial_pending(self.root)
+        except Exception:
+            pending = False
+        busy = self.operation is not None or pending
+
+        visible = self.operation or ('available' if available else 'idle')
+        if self.operation is None and pending:
+            visible = 'trial'
+
+        from module.runtime.setting import State
+        can_restart = State.restart_event is not None
+
+        return {
+            'state': visible,
+            'localHead': local,
+            'upstreamHead': upstream,
+            'branch': 'master',
+            'ahead': 0,
+            'behind': 1 if available else 0,
+            'available': available,
+            'busy': busy,
+            'error': self.error,
+            'canApply': bool(available and not busy and can_restart),
+            # 事务性安装不支持取消：中途打断会留下半装目录，apply() 失败会自己回滚
+            'canCancel': False,
+            'shaMismatch': False,
+            'forceUpdate': False,
+            'managedByAndroid': False,
+            'portable': True,
+        }
+
     def status(self) -> dict:
         """查询当前更新状态元数据。
 
@@ -151,6 +237,8 @@ class UpdateService:
                     'branch': 'dev', 'ahead': 0, 'behind': 0, 'available': False,
                     'busy': False, 'error': '', 'canApply': False, 'canCancel': False,
                     'shaMismatch': False, 'managedByAndroid': True}
+        if self.portable:
+            return self.portable_status()
         local, upstream = self.heads()
         ahead = behind = 0
         if local and upstream:
@@ -200,6 +288,8 @@ class UpdateService:
             local = self.android_manifest().get('azurpilot_commit')
             return {'entries': [], 'total': 0, 'hasMore': False,
                     'localHead': local, 'upstreamHead': local}
+        if self.portable:
+            return self.portable_commits(offset, limit)
         local, upstream = self.heads()
         refs = list(dict.fromkeys(ref for ref in (local, upstream) if ref))
         entries = []
@@ -213,6 +303,70 @@ class UpdateService:
         total = int(self.git('rev-list', '--count', *refs, '--')) if refs else 0
         return {'entries': entries[:limit], 'total': total, 'hasMore': len(entries) > limit,
                 'localHead': local or None, 'upstreamHead': upstream or None}
+
+    def portable_commits(self, offset: int = 0, limit: int = 50) -> dict:
+        """便携包模式下的提交历史。
+
+        便携包不带 .git，但 check() 会在 .azurpilot/independent-update/ 下留一个
+        缓存裸仓库（source-<id>.git），提交历史就从那里读。缓存不存在时返回空列表，
+        前端会显示"暂无记录"，不影响更新本身。
+
+        Args:
+            offset: 分页偏移量。
+            limit: 每页数量上限。
+
+        Returns:
+            dict: 与 Git 模式结构一致的提交历史。
+        """
+        independent = self._portable()
+        local = None
+        receipt_path = self.root / independent.RECEIPT
+        if receipt_path.is_file():
+            try:
+                local = independent.read_json(receipt_path).get('revision') or None
+            except (OSError, ValueError):
+                local = None
+        upstream = self._offer['revision'] if self._offer else None
+
+        empty = {'entries': [], 'total': 0, 'hasMore': False,
+                 'localHead': local, 'upstreamHead': upstream}
+
+        work = self.root / independent.WORK
+        if not work.is_dir():
+            return empty
+        repos = sorted(work.glob('source-*.git'))
+        if not repos:
+            return empty
+
+        refs = list(dict.fromkeys(ref for ref in (local, upstream) if ref))
+        if not refs:
+            return empty
+
+        def run(*args):
+            try:
+                result = subprocess.run(
+                    [independent._git_executable(self.root), f'--git-dir={repos[0]}', *args],
+                    capture_output=True, text=True, encoding='utf-8', errors='replace',
+                    timeout=20,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return ''
+            return result.stdout.strip() if result.returncode == 0 else ''
+
+        raw = run('log', '--topo-order', f'--skip={offset}', f'--max-count={limit + 1}',
+                  '--format=%H%x00%an%x00%aI%x00%B%x00', *refs, '--')
+        entries = []
+        fields = raw.split('\x00')
+        for index in range(0, len(fields) - 3, 4):
+            sha, author, date, message = fields[index:index + 4]
+            entries.append({'sha': sha.strip(), 'author': author, 'date': date,
+                            'message': message.strip()})
+        total = 0
+        count = run('rev-list', '--count', *refs, '--')
+        if count.isdigit():
+            total = int(count)
+        return {'entries': entries[:limit], 'total': total, 'hasMore': len(entries) > limit,
+                'localHead': local, 'upstreamHead': upstream}
 
     def start(self, operation: str) -> dict:
         """启动后台更新操作（fetch 或 apply）。
@@ -245,6 +399,46 @@ class UpdateService:
                 raise ApiError('UPDATE_FAILED', '无法启动更新任务，请重试') from exc
         return {'accepted': True}
 
+    def _run_portable(self, operation: str) -> None:
+        """便携模式下的后台更新执行体。
+
+        fetch：调 check() 拉远端 revision，结果缓存到 _offer
+        apply：prepare()（下载 + 解包 + 探活）→ apply()（替换文件）→ 请求重启
+
+        关键点：apply 之后不在这里确认，而是把重启请求发给 supervisor。
+        新进程启动时 journal 处于 trial 且 attempts 刚被 +1，
+        _recover_pending_update() 会放行首次试运行；等 HTTP 真的监听成功，
+        _confirm_pending_update() 才清掉回滚材料。这样"装完起不来"能被下一轮
+        启动回滚，而"装完正常"不会自己撤掉。
+
+        Args:
+            operation: 'fetch' 或 'apply'。
+        """
+        independent = self._portable()
+
+        if operation == 'fetch':
+            offer = independent.check(self.root)
+            self._offer = offer
+            self.error = ''
+            return
+
+        offer = self._offer
+        if not offer:
+            raise ApiError('UPDATE_UNAVAILABLE', '请先检查更新')
+
+        ready = independent.prepare(offer, self.root)
+        independent.apply(ready, self.root)
+        self._offer = None
+        self.error = ''
+
+        from module.runtime.setting import State
+        if State.restart_event is None:
+            # 直接运行模式（没有 supervisor）拿不到重启通道，只能让用户手动重启。
+            # 文件已经落地，重启后就是新版本，不算失败。
+            self.error = '更新已安装，请重启程序以生效'
+            return
+        State.restart_event.set()
+
     def _run(self, operation: str):
         """更新工作线程执行体。
 
@@ -253,6 +447,9 @@ class UpdateService:
         """
         owns_check = False
         try:
+            if self.portable:
+                self._run_portable(operation)
+                return
             if operation == 'fetch':
                 # 和旧更新流程共用互斥锁；保留 checking 状态阻止定时检查插入。
                 with self.updater._update_lock:
@@ -269,8 +466,13 @@ class UpdateService:
                     self.updater.state = 0
                 if not self.updater.run_update():
                     raise ApiError('UPDATE_FAILED', '更新失败，请检查服务日志')
-        except Exception:
-            self.error = '获取更新失败，请检查网络或服务日志' if operation == 'fetch' else '更新失败，请检查服务日志'
+        except Exception as exc:
+            if self.portable and isinstance(exc, (RuntimeError, ValueError)):
+                # 事务更新的异常消息是给用户看的（"检测到本机修改，保留现有文件 X"、
+                # "所选版本需要不同的 Python 依赖"），直接透出比一句笼统的"失败"有用
+                self.error = str(exc)
+            else:
+                self.error = '获取更新失败，请检查网络或服务日志' if operation == 'fetch' else '更新失败，请检查服务日志'
             if owns_check:
                 self.updater.state = 'failed'
         finally:
@@ -288,6 +490,10 @@ class UpdateService:
         """
         if self.android:
             raise ApiError('UPDATE_MANAGED_BY_ANDROID', 'Android 版由宿主在启动时执行整包更新')
+        if self.portable:
+            # 便携模式的安装是一个事务：中途打断会留下半新半旧的目录。
+            # apply() 内部已经做了"失败即回滚"，用户不需要（也不该）手动取消。
+            raise ApiError('UPDATE_UNAVAILABLE', '便携版更新不可中途取消，失败会自动回滚')
         if self.updater.state not in ('start', 'wait'):
             raise ApiError('UPDATE_UNAVAILABLE', '当前更新阶段无法取消')
         self.updater.cancel()

@@ -55,6 +55,14 @@ from module.runtime.setting import (
 
 DEPENDENCY_SYNC_RESPONSE_TIMEOUT = DEPENDENCY_SYNC_TIMEOUT + 60
 
+# 应用根目录：本文件所在目录。
+#
+# 事务更新的所有路径都必须基于它，不能用 Path.cwd()。
+# 用 cwd 的话，从别处（pytest、快捷方式改了工作目录、服务被别的程序拉起）
+# 启动时就会去错误的位置找 journal，回滚逻辑静默失效——
+# 表面上"启动正常"，实际上坏版本被永久保留。
+APP_ROOT = Path(__file__).resolve().parent
+
 # 退出码定义
 EXIT_SUCCESS = 0
 EXIT_STARTUP_FAILURE = 70              # 通用/未分类启动失败
@@ -312,6 +320,9 @@ def _watch_server_started(server, ready_event: Event) -> None:
             return
         time.sleep(0.1)
     ready_event.set()
+    # 端口已在监听 = 新版本能跑起来。这是事务更新的确认点，
+    # 放在这里而不是启动前，才能区分「装完还没试」和「试过起不来」。
+    _confirm_pending_update()
 
 
 def _run_uvicorn_server(config, ready_event: Optional[Event] = None, sockets=None) -> None:
@@ -1341,13 +1352,14 @@ def _restart_self() -> None:
 
 
 def _recover_pending_update() -> Optional[int]:
-    """启动前续上未完成的更新回滚。
+    """启动前判断要不要回滚未确认的更新。
 
-    为什么必须在启动最前面做：
-    事务更新是先写文件、再写 journal(trial)，靠一次成功启动来确认。如果进程
-    在 apply() 之后、confirm() 之前被杀（断电、强杀、或新版本自己起不来），
-    磁盘上就留着「journal 还在 + 代码已换成新版」。此时不回滚，用户每次启动
-    都跑那个起不来的版本，等于永久变砖——而且他会以为是自己环境坏了。
+    事务更新是「写文件 → journal(trial) → 靠一次成功启动确认」。这里的关键是
+    分清两种 trial：
+        刚装完的首次启动 —— 必须放它跑，否则等于装完立刻自己撤掉
+        第二次启动       —— 上次没能跑到 confirm()，新版本起不来，回滚
+
+    用 bump_trial_attempt() 的计数来区分。
 
     放在 database.initialize() 之前还有一个原因：回滚会把整个 config/
     目录换成快照，如果数据库已经初始化过，句柄会挡住目录替换（Windows 上
@@ -1357,14 +1369,13 @@ def _recover_pending_update() -> Optional[int]:
         Optional[int]: 需要中止启动时返回退出码；可以继续启动时返回 None。
     """
     try:
-        from deploy.independent import recover, trial_pending
+        from deploy.independent import bump_trial_attempt, recover
     except Exception:
         # 精简部署（例如 Android 版）不带这个模块，回滚能力缺失不影响启动
         return None
 
     try:
-        if not trial_pending():
-            return None
+        attempts = bump_trial_attempt(APP_ROOT)
     except Exception as exc:
         logger.error_context(
             title='更新状态读取失败',
@@ -1376,9 +1387,16 @@ def _recover_pending_update() -> Optional[int]:
         )
         return EXIT_UPDATE_RECOVERY_FAILURE
 
-    logger.warning('[GUI] 检测到上一轮更新未确认，开始回滚到更新前的版本')
+    if attempts is None:
+        return None
+    if attempts == 1:
+        # 首次启动新版本，先让它跑；成功监听到 HTTP 后会走 _confirm_pending_update()
+        logger.info('[GUI] 检测到待确认的更新，本次启动为试运行')
+        return None
+
+    logger.warning('[GUI] 新版本已试运行 %s 次仍未确认，回滚到更新前的版本', attempts - 1)
     try:
-        recovered = recover()
+        recovered = recover(APP_ROOT)
     except Exception as exc:
         logger.error_context(
             title='更新回滚失败',
@@ -1411,6 +1429,24 @@ def _recover_pending_update() -> Optional[int]:
         return EXIT_STARTUP_FAILURE
     # execv 成功时不会回到这里
     return EXIT_SUCCESS
+
+
+def _confirm_pending_update() -> None:
+    """WebUI 成功监听后确认本次更新，清掉回滚材料。
+
+    这一步才是「试运行通过」。放在服务真的对外可用之后而不是启动之前，
+    因为能起 HTTP 服务就说明新代码至少 import 得动、依赖齐、前端 dist 能挂上。
+
+    失败只记日志：确认失败最坏是下次启动多回滚一次，不该影响当前这次服务。
+    """
+    try:
+        from deploy.independent import confirm, trial_pending
+        if not trial_pending(APP_ROOT):
+            return
+        if confirm(APP_ROOT):
+            logger.info('[GUI] 更新试运行通过，已确认并清理回滚材料')
+    except Exception as exc:
+        logger.warning('[GUI] 更新确认失败（不影响当前服务）：%s', exc)
 
 
 def main() -> int:

@@ -94,6 +94,10 @@ def is_signable(name):
         bool: 参与签名返回 True。
     """
     parts = name.split('/')
+    if any(part == '__pycache__' for part in parts):
+        return False
+    if parts[-1].endswith(('.pyc', '.pyo')):
+        return False
     if len(parts) == 1:
         return name in SIGNABLE_ROOT_FILES
     head = parts[0]
@@ -101,7 +105,10 @@ def is_signable(name):
         # 只要构建产物，源码与 e2e 用例不进包
         return len(parts) > 2 and parts[1] == 'dist'
     if head == 'config':
-        # 用户配置不签名；模板由代码生成，也不需要靠清单守护
+        # 用户配置目录既不签名也不由更新包修改。
+        # 模板文件也不用签：config_update() 会按 schema 补齐新字段，
+        # 不靠更新包分发；而一旦签了它，apply 的哈希比对就会因为
+        # files.json 里没有它而误判"本机修改"，把整个更新挡下来。
         return False
     return head in SIGNABLE_DIRS
 

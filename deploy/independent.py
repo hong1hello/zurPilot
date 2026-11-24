@@ -158,6 +158,37 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+def replace_dir(src, dst, attempts=15, delay=0.2):
+    """原子替换目录，遇到占用时退避重试。
+
+    为什么要重试：
+    Windows 上 os.replace 对目录会因句柄未释放而抛 PermissionError(WinError 32)。
+    常见占用来源都是短暂的——刚被 kill 的探活子进程、杀毒软件实时扫描、
+    Windows 索引服务。这类占用通常几百毫秒到几秒就没了，
+    直接失败会让用户看到"更新失败"却查不出原因。
+
+    重试间隔递增（0.2s、0.5s、0.8s…），累计约 20 秒，足够覆盖扫描类占用。
+
+    Args:
+        src (Path): 源目录。
+        dst (Path): 目标路径，必须不存在。
+        attempts (int): 最大尝试次数。
+        delay (float): 首次重试间隔，后续递增。
+
+    Raises:
+        PermissionError: 全部重试都失败时抛出最后一次异常。
+    """
+    src, dst = Path(src), Path(dst)
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay * (1 + attempt * 0.5))
+
+
 def write_json(path, value):
     """原子写入 JSON：临时文件 + fsync + os.replace。
 
@@ -217,6 +248,15 @@ def app_path(name, *, frontend=False, build_frontend=False):
             return False
         if ntpath.isreserved(part):
             return False
+        # 字节码缓存绝不能进更新链路。
+        # 签名侧（release_manifest.EXCLUDE_DIRS）早就排除了 __pycache__，
+        # 但解包侧曾经放行，于是更新包里一旦混进 .pyc，apply 逐文件比对
+        # 就会发现"本地没有这个文件"而判定本机修改，整个更新被挡下来。
+        # .pyc 与解释器版本、源码路径强绑定，本来也不该跨机器传输。
+        if part == '__pycache__':
+            return False
+        if part.endswith(('.pyc', '.pyo')):
+            return False
 
     if frontend:
         return len(posix.parts) > 2 and posix.parts[:2] == ('frontend', 'dist')
@@ -226,11 +266,16 @@ def app_path(name, *, frontend=False, build_frontend=False):
     if len(posix.parts) == 1:
         return name in APP_FILES
     if posix.parts[0] == 'config':
-        # config 只允许模板文件，用户配置一律不通过更新覆盖
-        return len(posix.parts) == 2 and (
-            posix.name == 'template.json'
-            or (posix.name.startswith('deploy.template') and posix.suffix == '.yaml')
-        )
+        # config 整个目录都不由更新包修改。
+        #
+        # 曾经放行过 template.json / deploy.template.yaml，想着"模板要跟着版本更新"，
+        # 但那和签名范围直接冲突：config 在 release_manifest 的 EXCLUDE_DIRS 里
+        # （用户配置不该被校验），于是 files.json 里没有这些模板，
+        # apply 逐文件比对时必然判定"本机修改"而中止整个更新——
+        # 结果是"可更新但永远更新不了"。
+        #
+        # 模板本来也不需要走更新包：config_update() 会按 schema 补齐新字段。
+        return False
     if posix.parts[0] == 'frontend':
         # 只放行构建产物 frontend/dist/**。
         # 不能整段收下 frontend/：那里有源码和 node_modules，几万个文件，
@@ -811,6 +856,30 @@ def _build_frontend(root, archive, directory, staged):
     return hashes
 
 
+def _seed_probe_config(root, staged):
+    """给候选目录补一份配置模板，只用于启动探活。
+
+    更新不该碰用户配置，所以 config/ 不在 app_path 白名单里、也不进 files.json。
+    但 create_app() 启动时要读 config/template.json，缺了它候选版起不来，
+    探活就会把"缺模板"误判成"新版本不可用"。
+
+    只复制模板文件，不碰 ap.json / 数据库——用户的真实配置一个字节都不动。
+
+    Args:
+        root (Path): 应用根目录，模板从这里读。
+        staged (Path): 候选目录，模板补到这里。
+    """
+    source = Path(root) / 'config'
+    if not source.is_dir():
+        return
+    target = Path(staged) / 'config'
+    target.mkdir(exist_ok=True)
+    for name in ('template.json', 'deploy.template.yaml'):
+        origin = source / name
+        if origin.is_file():
+            shutil.copy2(origin, target / name)
+
+
 def _frontend_for_commit(root, offer, revision, archive, directory, staged):
     """三级前端策略：包内预置 → 匹配发布包 → 源码构建。
 
@@ -1092,10 +1161,16 @@ def prepare(offer, root=None):
             raise ValueError('应用包缺少必要文件')
 
         # 最后一道闸：候选版必须真能对外服务
+        #
+        # 候选目录是从 git archive 出来的，里面没有 config/（app_path 不放行，
+        # 更新本来也不该改用户配置）。但 create_app() 启动时要读模板文件，
+        # 缺了它会直接 ModuleNotFound 式的 FileNotFoundError 起不来。
+        # 这里把模板补进去——只给探活用，files 里不记，apply 不会碰。
+        _seed_probe_config(root, staged)
         probe(root, staged)
 
         ready = Path(tempfile.mkdtemp(prefix='ready-', dir=str(directory)))
-        os.replace(staged, ready / 'app')
+        replace_dir(staged, ready / 'app')
         write_json(ready / 'files.json', files)
         write_json(ready / 'version.json', {**current, 'revision': revision})
         write_json(ready / 'source.json', list(source))
@@ -1179,7 +1254,10 @@ def apply(ready, root=None):
                 target.unlink(missing_ok=True)
         write_json(files_path, new)
         write_json(receipt_path, read_json(ready / 'version.json'))
-        write_json(journal, {'ready': ready.name, 'changed': changed, 'phase': 'trial'})
+        # attempts 记的是"启动新版本试了几次"。首次启动不算失败，
+        # 只有第二次还看到这条 trial 记录，才说明上一次启动没能跑到确认点。
+        write_json(journal, {'ready': ready.name, 'changed': changed,
+                             'phase': 'trial', 'attempts': 0})
     except BaseException:
         # 安装中途失败必须原地回滚，不能让用户停在半新半旧的状态
         recover(root)
@@ -1219,9 +1297,9 @@ def recover(root=None):
             # 先把快照复制到中间位置，两次 rename 之间断电还能从记录继续
             shutil.copytree(backup / 'config', prepared, dirs_exist_ok=True)
             if config.exists():
-                os.replace(config, failed)
+                replace_dir(config, failed)
         if not config.exists():
-            os.replace(prepared, config)
+            replace_dir(prepared, config)
 
     for name in record.get('changed', []):
         target = check_target(root, name)
@@ -1273,8 +1351,8 @@ def confirm(root=None):
 def trial_pending(root=None):
     """是否存在未确认的试运行事务。
 
-    启动器在每次拉起 WebUI 前查一次：为真说明上一轮装完但没确认，
-    本次启动成功就该 confirm()，启动失败就该 recover()。
+    启动器在每次拉起 WebUI 前查一次。为真只说明「装完了还没确认」，
+    **不等于要回滚**——见 bump_trial_attempt()。
 
     Args:
         root (str | Path, optional): 应用根目录。
@@ -1283,6 +1361,41 @@ def trial_pending(root=None):
         bool: journal 存在返回 True。
     """
     return _transaction(Path(root or Path.cwd()).resolve()).is_file()
+
+
+def bump_trial_attempt(root=None):
+    """记录一次"启动新版本的尝试"，返回累计尝试次数。
+
+    为什么需要它：
+    apply() 之后 journal 停在 trial，紧接着就要重启让新代码生效。
+    如果启动时看到 trial 就回滚，等于刚装完立刻自己撤掉，永远更新不了。
+    但如果启动崩了又不回滚，用户每次开机都撞在坏版本上。
+
+    用计数区分这两种情况：
+        第 1 次启动  → 这是刚装完的首次尝试，放它跑
+        第 2 次启动  → 上次没能跑到 confirm()，说明新版本起不来，回滚
+
+    Args:
+        root (str | Path, optional): 应用根目录。
+
+    Returns:
+        int | None: 累计尝试次数；没有待试运行事务时返回 None。
+
+    Raises:
+        ValueError: journal 内容损坏。
+    """
+    root = Path(root or Path.cwd()).resolve()
+    journal = _transaction(root)
+    if not journal.is_file():
+        return None
+    record = read_json(journal)
+    if record.get('phase') != 'trial':
+        # installing 说明上次装到一半就被打断了，交给 recover 处理，不该走试运行
+        return None
+    attempts = int(record.get('attempts', 0)) + 1
+    record['attempts'] = attempts
+    write_json(journal, record)
+    return attempts
 
 
 def install(root=None, *, checkout=True):
