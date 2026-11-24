@@ -76,6 +76,35 @@ def android_dist_ready(commit, root=None):
         return False
 
 
+def android_channel_commit(timeout=10):
+    """读取宿主发布渠道 latest.json 记录的 azurpilotCommit。
+
+    热更的目标必须以「宿主实际发布过 dist 的提交」为准，而不是上游 master 的
+    ls-remote 头：dist 是 CI 按构建时的提交发布的，上游一前进就拿不到对应
+    前端包，探测恒为 False，热更通道等于永久不可用。
+
+    Args:
+        timeout (int): 单次请求超时秒数。
+
+    Returns:
+        str: 40 位提交哈希；渠道不可用或字段缺失时返回空串。
+    """
+    base = android_dist_base()
+    if not base:
+        return ''
+    request = urllib.request.Request(
+        f'{base}/latest.json', headers={'User-Agent': _ANDROID_UA, 'Cache-Control': 'no-cache'})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode('utf-8', 'replace'))
+    except (OSError, ValueError):
+        return ''
+    commit = payload.get('azurpilotCommit') if isinstance(payload, dict) else ''
+    if isinstance(commit, str) and len(commit) == 40:
+        return commit
+    return ''
+
+
 def _android_download(url, target, timeout=300):
     """下载文件到 target 并返回字节数；网络错误统一转 RuntimeError。"""
     request = urllib.request.Request(url, headers={'User-Agent': _ANDROID_UA})
@@ -87,19 +116,22 @@ def _android_download(url, target, timeout=300):
     return target.stat().st_size
 
 
-def _android_fetch_dist(directory, root):
-    """拉取与当前源码提交匹配的预构建 dist 并校验指纹。
+def _android_fetch_dist(directory, root, commit=None):
+    """拉取与目标提交匹配的预构建 dist 并校验指纹。
 
     Args:
         directory (Path): 前端工程目录（frontend/）。
-        root (Path): 项目根目录（读 BUILD_MANIFEST 定提交）。
+        root (Path): 项目根目录（读 BUILD_MANIFEST 兜底定提交）。
+        commit (str, optional): 显式目标提交。热更时源码已 reset 到新提交而
+            BUILD_MANIFEST 仍是旧值，必须由调用方把目标传进来；否则会拉到旧
+            提交的包、却按新源码指纹校验，必然失配。
 
     Raises:
         RuntimeError: 未注入基址、清单元数据缺失、下载/校验失败或指纹失配。
     """
     from module.logger import logger
 
-    commit = android_manifest(root).get('azurpilot_commit')
+    commit = commit or android_manifest(root).get('azurpilot_commit')
     base = android_dist_base()
     if not base:
         raise RuntimeError(f'安卓环境缺少 {ANDROID_DIST_BASE_ENV}，无法获取预构建前端')
